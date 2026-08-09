@@ -50,8 +50,19 @@ public partial class App : Application
             return; // a relaunch signal arrived while we were already closing
         }
 
-        Dispatcher.Invoke(() =>
+        // BeginInvoke (fire-and-forget), not Invoke: this runs on the
+        // activation-listener thread, which SingleInstance.Dispose() joins
+        // (with a timeout) from the UI thread during shutdown. A blocking
+        // Invoke here could deadlock against that join for up to the join's
+        // timeout, and then be left stranded mid-call once the dispatcher
+        // finishes shutting down out from under it.
+        Dispatcher.BeginInvoke(() =>
         {
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+            {
+                return; // shutdown started while this was queued
+            }
+
             var window = MainWindow;
             if (window is null)
             {
