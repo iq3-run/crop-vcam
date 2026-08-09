@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+  </ItemGroup>
+
+  <!-- Dev convenience: pick up the native filter DLL once it's been built
+       (see the repo README's "ビルド" section for how). Missing at
+       csproj-eval time just means "build the filter first" - not an error. -->
+  <ItemGroup Condition="'$(SkipFilterDllCopy)' != 'true'">
+    <None Include="..\CropVCam.Filter\build\CropVCamFilter.dll"
+          Condition="Exists('..\CropVCam.Filter\build\CropVCamFilter.dll')"
+          Link="CropVCamFilter.dll"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
