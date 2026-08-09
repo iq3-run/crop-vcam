@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "CropVCamFilter.h"  // full CCropVCamSource definition, needed for the static_cast below
 #include "SharedFrameProtocol.h"
 
 namespace {
@@ -16,7 +17,7 @@ int OutputFrameBytes() { return CropVCam::kOutputWidth * CropVCam::kOutputHeight
 }  // namespace
 
 CCropVCamStream::CCropVCamStream(HRESULT* phr, CCropVCamSource* pParent, LPCWSTR pPinName)
-    : CSourceStream(NAME("CropVCam Output Stream"), phr, reinterpret_cast<CSource*>(pParent), pPinName),
+    : CSourceStream(NAME("CropVCam Output Stream"), phr, static_cast<CSource*>(pParent), pPinName),
       latestFrame_(new BYTE[OutputFrameBytes()]),
       streamPosition_(0),
       frameLengthUnits_(kUnitsPerSecond / kTargetFps) {
@@ -49,6 +50,7 @@ HRESULT STDMETHODCALLTYPE CCropVCamStream::Set(REFGUID /*guidPropSet*/, DWORD /*
 HRESULT STDMETHODCALLTYPE CCropVCamStream::Get(REFGUID guidPropSet, DWORD dwPropID, LPVOID /*pInstanceData*/,
                                                 DWORD /*cbInstanceData*/, LPVOID pPropData, DWORD cbPropData,
                                                 DWORD* pcbReturned) {
+  CheckPointer(pcbReturned, E_POINTER);
   if (guidPropSet != AMPROPSETID_Pin || dwPropID != AMPROPERTY_PIN_CATEGORY) {
     return E_PROP_SET_UNSUPPORTED;
   }

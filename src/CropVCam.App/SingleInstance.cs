@@ -11,6 +11,8 @@ internal sealed class SingleInstance : IDisposable
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activateEvent;
+    private readonly ManualResetEvent _stopEvent = new(initialState: false);
+    private Thread? _listenerThread;
 
     public SingleInstance()
     {
@@ -27,28 +29,39 @@ internal sealed class SingleInstance : IDisposable
 
     public void ListenForActivationRequests(Action onActivateRequested)
     {
-        var thread = new Thread(() =>
-        {
-            while (true)
-            {
-                _activateEvent.WaitOne();
-                onActivateRequested();
-            }
-        })
+        _listenerThread = new Thread(() => ListenLoop(onActivateRequested))
         {
             IsBackground = true,
             Name = "CropVCam-ActivationListener",
         };
-        thread.Start();
+        _listenerThread.Start();
     }
 
     public void Dispose()
     {
+        // Signal the listener thread to exit its wait and join it BEFORE
+        // disposing the handles it waits on - disposing a WaitHandle out
+        // from under a thread still blocked in WaitOne/WaitAny throws
+        // ObjectDisposedException there, which is unhandled and would
+        // crash the whole process (this runs on every normal app close).
+        _stopEvent.Set();
+        _listenerThread?.Join(TimeSpan.FromSeconds(2));
+
         if (IsFirstInstance)
         {
             _mutex.ReleaseMutex();
         }
         _mutex.Dispose();
         _activateEvent.Dispose();
+        _stopEvent.Dispose();
+    }
+
+    private void ListenLoop(Action onActivateRequested)
+    {
+        var handles = new WaitHandle[] { _stopEvent, _activateEvent };
+        while (WaitHandle.WaitAny(handles) == 1)
+        {
+            onActivateRequested();
+        }
     }
 }

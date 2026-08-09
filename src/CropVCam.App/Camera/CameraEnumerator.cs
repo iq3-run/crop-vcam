@@ -18,26 +18,40 @@ internal static class CameraEnumerator
         var category = DirectShowCategories.VideoInputDevice;
         var systemDeviceEnum = (ICreateDevEnum)new SystemDeviceEnum();
 
-        var hr = systemDeviceEnum.CreateClassEnumerator(ref category, out var enumMoniker, 0);
-        if (hr != 0 || enumMoniker is null)
+        try
         {
-            return devices; // S_FALSE: no capture devices installed at all
-        }
-
-        // rawIndex tracks position in DirectShow's own enumeration, not how
-        // many devices we've kept - it must match what VideoCapture(index,
-        // DSHOW) expects even when we skip our own virtual camera partway
-        // through the list.
-        var fetched = new IMoniker[1];
-        var rawIndex = 0;
-        while (enumMoniker.Next(1, fetched, IntPtr.Zero) == 0)
-        {
-            if (TryCreateDevice(fetched[0], rawIndex, out var device))
+            var hr = systemDeviceEnum.CreateClassEnumerator(ref category, out var enumMoniker, 0);
+            if (hr != 0 || enumMoniker is null)
             {
-                devices.Add(device);
+                return devices; // S_FALSE: no capture devices installed at all
             }
 
-            rawIndex++;
+            try
+            {
+                // rawIndex tracks position in DirectShow's own enumeration, not
+                // how many devices we've kept - it must match what
+                // VideoCapture(index, DSHOW) expects even when we skip our own
+                // virtual camera partway through the list.
+                var fetched = new IMoniker[1];
+                var rawIndex = 0;
+                while (enumMoniker.Next(1, fetched, IntPtr.Zero) == 0)
+                {
+                    if (TryCreateDevice(fetched[0], rawIndex, out var device))
+                    {
+                        devices.Add(device);
+                    }
+
+                    rawIndex++;
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(enumMoniker);
+            }
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(systemDeviceEnum);
         }
 
         return devices;
@@ -48,7 +62,7 @@ internal static class CameraEnumerator
         try
         {
             var (name, clsid) = ReadFriendlyNameAndClsid(moniker);
-            if (name is null || clsid == FilterRegistrar.FilterClsid)
+            if (string.IsNullOrWhiteSpace(name) || clsid == FilterRegistrar.FilterClsid)
             {
                 device = null!;
                 return false; // unnamed device, or our own virtual camera (avoid a feedback loop)
@@ -56,6 +70,13 @@ internal static class CameraEnumerator
 
             device = new CameraDevice(rawIndex, name);
             return true;
+        }
+        catch (COMException)
+        {
+            // A single stale/broken device moniker shouldn't wipe out the
+            // rest of the camera list.
+            device = null!;
+            return false;
         }
         finally
         {

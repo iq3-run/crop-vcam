@@ -2,6 +2,11 @@
 
 Issue: #1
 
+> **Note**: このファイルは実装開始時点の設計判断の記録であり、実装の進行に伴い一部が
+> 現状と食い違っている（例: vcpkg導入 → baseclasses直接vendoringへ変更、`.sln` → `.slnx`、
+> 共有メモリ名は出力名ハッシュではなく固定名、出力解像度は選択デバイス追従ではなく
+> 1280x720固定）。現在の正確な仕様は [README.md](../README.md) を参照。
+
 ## 背景・要件
 
 物理カメラの映像を中央基準でクロップし、Windows仮想カメラとして出力するデスクトップアプリ。
@@ -26,7 +31,7 @@ Issue: #1
 2つの実行主体に分かれる点が最大のポイント：DirectShowフィルタは **消費側アプリ（Zoom等）のプロセス内に
 in-proc ロードされる**。したがって本体アプリ（別プロセス）とはプロセス間通信（共有メモリ）で映像を橋渡しする。
 
-```
+```text
 [物理カメラ]
      │ Media Foundation / OpenCvSharp (MSMF backend)
      ▼
@@ -68,7 +73,7 @@ DirectShowフィルタは `CoCreateInstance` した側（＝Zoomのプロセス�
 
 ## コンポーネント構成
 
-```
+```text
 crop-vcam/
   CropVCam.sln
   src/

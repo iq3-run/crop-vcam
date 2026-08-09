@@ -54,10 +54,19 @@ internal sealed class CameraCapture : IDisposable
     public void Stop()
     {
         _cancellation?.Cancel();
-        _captureThread?.Join(TimeSpan.FromSeconds(2));
+        var stopped = _captureThread?.Join(TimeSpan.FromSeconds(2)) ?? true;
         _captureThread = null;
         _cancellation?.Dispose();
         _cancellation = null;
+
+        if (!stopped)
+        {
+            // The capture thread is still blocked inside a native call (e.g.
+            // VideoCapture.Read on a wedged driver). Disposing _videoCapture
+            // out from under it would be a use-after-free, so it's left for
+            // the GC/finalizer instead of freed here.
+            return;
+        }
 
         _videoCapture?.Dispose();
         _videoCapture = null;

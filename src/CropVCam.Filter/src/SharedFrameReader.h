@@ -15,10 +15,11 @@ class SharedFrameReader {
   SharedFrameReader(const SharedFrameReader&) = delete;
   SharedFrameReader& operator=(const SharedFrameReader&) = delete;
 
-  // Waits up to timeoutMs for a new frame. On success copies it into
-  // destBuffer (which must be at least kMaxPayloadBytes) and fills in the
-  // frame's actual dimensions/stride. Returns false on timeout or if the
-  // writer hasn't started yet.
+  // Waits up to timeoutMs (total, across both the "new frame" event and the
+  // mutex acquire) for a new frame. On success copies it into destBuffer
+  // (which must be at least kOutputPayloadBytes) and fills in the frame's
+  // dimensions/stride. Returns false on timeout or if the writer hasn't
+  // started yet.
   bool WaitAndCopyFrame(BYTE* destBuffer, long destCapacityBytes, DWORD timeoutMs,
                         int* outWidth, int* outHeight, int* outStrideBytes);
 

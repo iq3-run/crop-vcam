@@ -29,7 +29,7 @@
                       ItemsSource="{Binding CameraDevices}"
                       SelectedItem="{Binding SelectedCamera}"
                       DisplayMemberPath="Name"
-                      IsEnabled="{Binding CanEditOutputName}" />
+                      IsEnabled="{Binding CanEditSettings}" />
         </Grid>
 
         <!-- 倍率 -->
@@ -67,7 +67,7 @@
             <TextBlock Grid.Column="0" Text="出力：" VerticalAlignment="Center" Width="48" />
             <TextBox Grid.Column="1"
                      Text="{Binding OutputName, UpdateSourceTrigger=PropertyChanged}"
-                     IsEnabled="{Binding CanEditOutputName}" />
+                     IsEnabled="{Binding CanEditSettings}" />
         </Grid>
 
         <TextBlock Grid.Row="4" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,4" />

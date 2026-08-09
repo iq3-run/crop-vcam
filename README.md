@@ -6,7 +6,7 @@
 
 ## 構成
 
-```
+```text
 src/
   CropVCam.App/     WPFアプリ本体（.NET 8, C#）。カメラキャプチャ・クロップ処理・プレビューUI
   CropVCam.Filter/  DirectShowソースフィルタ（C++）。Zoom等のプロセス内にロードされ、

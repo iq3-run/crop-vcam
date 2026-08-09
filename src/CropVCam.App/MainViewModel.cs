@@ -38,7 +38,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartStopButtonText))]
-    [NotifyPropertyChangedFor(nameof(CanEditOutputName))]
+    [NotifyPropertyChangedFor(nameof(CanEditSettings))]
     [NotifyCanExecuteChangedFor(nameof(StartStopCommand))]
     private bool isRunning;
 
@@ -48,8 +48,10 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string? errorMessage;
 
+    private int _previewUpdatePending;
+
     public string StartStopButtonText => IsRunning ? "停止" : "開始";
-    public bool CanEditOutputName => !IsRunning;
+    public bool CanEditSettings => !IsRunning;
 
     public MainViewModel()
     {
@@ -120,8 +122,11 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnFrameCaptured(Mat sourceFrame)
     {
+        // The slider clamps itself, but the bound TextBox doesn't - guard
+        // against a typed 0/negative/huge value reaching the crop math.
+        var magnification = Math.Clamp(Magnification, MinMagnification, MaxMagnification);
         using var cropped = CenterCropScaler.CropAndScale(
-            sourceFrame, Magnification, SharedFrameProtocol.OutputWidth, SharedFrameProtocol.OutputHeight);
+            sourceFrame, magnification, SharedFrameProtocol.OutputWidth, SharedFrameProtocol.OutputHeight);
 
         var pixelBytes = ToBgr24Bytes(cropped);
         _frameWriter?.WriteFrame(pixelBytes);
@@ -142,11 +147,26 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void UpdatePreview(byte[] bgrPixels, int width, int height)
     {
+        // If the UI thread is stalled, dispatcher-queued updates (each
+        // holding a ~2.7MB frame) would otherwise pile up unbounded; drop
+        // frames instead of queuing behind ones that haven't rendered yet.
+        if (Interlocked.Exchange(ref _previewUpdatePending, 1) == 1)
+        {
+            return;
+        }
+
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr24, null, bgrPixels, width * 3);
-            bitmap.Freeze();
-            PreviewImage = bitmap;
+            try
+            {
+                var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgr24, null, bgrPixels, width * 3);
+                bitmap.Freeze();
+                PreviewImage = bitmap;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _previewUpdatePending, 0);
+            }
         });
     }
 

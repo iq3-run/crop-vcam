@@ -4,6 +4,12 @@ project(CropVCamFilter LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Statically link the VC++ runtime. This filter DLL loads in-process inside
+# whatever app opens the virtual camera (Zoom, Teams, ffmpeg, ...) - if it
+# depended on the redistributable being installed and it wasn't, fixing that
+# would need admin rights, which this project must never require.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 add_compile_definitions(_UNICODE UNICODE WIN32_LEAN_AND_MEAN)
 
 # --- Microsoft DirectShow base classes (vendored, MIT licensed) ---

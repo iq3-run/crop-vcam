@@ -15,9 +15,9 @@
   </ItemGroup>
 
   <!-- Dev convenience: pick up the native filter DLL once it's been built
-       (see src/CropVCam.Filter/README or the repo README for how). Missing
-       at csproj-eval time just means "build the filter first" - not an error. -->
-  <ItemGroup>
+       (see the repo README's "ビルド" section for how). Missing at
+       csproj-eval time just means "build the filter first" - not an error. -->
+  <ItemGroup Condition="'$(SkipFilterDllCopy)' != 'true'">
     <None Include="..\CropVCam.Filter\build\CropVCamFilter.dll"
           Condition="Exists('..\CropVCam.Filter\build\CropVCamFilter.dll')"
           Link="CropVCamFilter.dll"

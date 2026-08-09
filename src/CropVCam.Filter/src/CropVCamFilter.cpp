@@ -1,9 +1,11 @@
 #include "CropVCamFilter.h"
 
+#include <new>
+
 #include "CropVCamStream.h"
 
 CUnknown* WINAPI CCropVCamSource::CreateInstance(LPUNKNOWN pUnk, HRESULT* phr) {
-  CCropVCamSource* pNewFilter = new CCropVCamSource(pUnk, phr);
+  CCropVCamSource* pNewFilter = new (std::nothrow) CCropVCamSource(pUnk, phr);
   if (pNewFilter == nullptr && phr != nullptr) {
     *phr = E_OUTOFMEMORY;
   }
