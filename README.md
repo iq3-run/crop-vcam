@@ -53,6 +53,12 @@ dotnet run --project src/CropVCam.App/CropVCam.App.csproj
 `Cropped Virtual Camera`）が表示されるはず。「停止」で映像配信を止める
 （登録自体は解除されない）。
 
+## 配布（リリースzip）
+
+エンドユーザー向けの使い方ガイドは [README.txt](README.txt)（サポート窓口がPC初心者に説明する想定の
+平易な文面）。配布用zipを作成する際は、ビルド成果物一式（`CropVCam.App.exe` とその出力ディレクトリ）と
+一緒に `README.txt` を同梱すること。
+
 ## 既知の制約 / 未検証事項
 
 - 仮想カメラの出力解像度は 1280x720 固定（`SharedFrameProtocol` で定義）。
