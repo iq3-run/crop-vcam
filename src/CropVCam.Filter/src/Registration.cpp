@@ -32,6 +32,22 @@ HRESULT WriteStringValue(HKEY key, const wchar_t* name, const wchar_t* value) {
   return HRESULT_FROM_WIN32(result);
 }
 
+HRESULT RegisterInprocServer(HKEY clsidKey, const wchar_t* modulePath) {
+  HKEY inprocKey = nullptr;
+  LONG result = RegCreateKeyExW(clsidKey, L"InprocServer32", 0, nullptr, 0, KEY_WRITE, nullptr,
+                                 &inprocKey, nullptr);
+  if (result != ERROR_SUCCESS) {
+    return HRESULT_FROM_WIN32(result);
+  }
+
+  HRESULT hr = WriteStringValue(inprocKey, nullptr, modulePath);
+  if (SUCCEEDED(hr)) {
+    hr = WriteStringValue(inprocKey, L"ThreadingModel", L"Both");
+  }
+  RegCloseKey(inprocKey);
+  return hr;
+}
+
 HRESULT RegisterBaseClsid() {
   wchar_t modulePath[MAX_PATH];
   if (GetModuleFileNameW(g_hInst, modulePath, MAX_PATH) == 0) {
@@ -50,20 +66,8 @@ HRESULT RegisterBaseClsid() {
   }
 
   HRESULT hr = WriteStringValue(clsidKey, nullptr, kDefaultFriendlyName);
-
   if (SUCCEEDED(hr)) {
-    HKEY inprocKey = nullptr;
-    result = RegCreateKeyExW(clsidKey, L"InprocServer32", 0, nullptr, 0, KEY_WRITE, nullptr,
-                              &inprocKey, nullptr);
-    if (result == ERROR_SUCCESS) {
-      hr = WriteStringValue(inprocKey, nullptr, modulePath);
-      if (SUCCEEDED(hr)) {
-        hr = WriteStringValue(inprocKey, L"ThreadingModel", L"Both");
-      }
-      RegCloseKey(inprocKey);
-    } else {
-      hr = HRESULT_FROM_WIN32(result);
-    }
+    hr = RegisterInprocServer(clsidKey, modulePath);
   }
 
   RegCloseKey(clsidKey);

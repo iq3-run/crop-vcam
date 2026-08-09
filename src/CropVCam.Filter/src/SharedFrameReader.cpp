@@ -73,7 +73,7 @@ bool SharedFrameReader::WaitAndCopyFrame(BYTE* destBuffer, long destCapacityByte
     const int stride = *reinterpret_cast<const int*>(view_ + 12);
     const long payloadBytes = static_cast<long>(stride) * height;
 
-    if (payloadBytes > 0 && payloadBytes <= destCapacityBytes && payloadBytes <= kMaxPayloadBytes) {
+    if (payloadBytes > 0 && payloadBytes <= destCapacityBytes && payloadBytes <= kOutputPayloadBytes) {
       std::memcpy(destBuffer, view_ + kHeaderSize, static_cast<size_t>(payloadBytes));
       *outWidth = width;
       *outHeight = height;

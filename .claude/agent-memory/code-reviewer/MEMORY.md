@@ -1,0 +1,2 @@
+- [crop-vcam project overview](project_crop_vcam_overview.md) — two-language structure, non-admin constraint, exclude baseclasses/ from style review
+- [Shared-region size mismatch finding](finding_shared_region_size_mismatch.md) — recurring risk class: check MMF capacity, not just header field offsets, stay in sync across C#/C++

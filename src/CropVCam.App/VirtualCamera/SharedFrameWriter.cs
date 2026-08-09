@@ -39,7 +39,7 @@ internal sealed class SharedFrameWriter : IDisposable
                 nameof(bgr24Pixels));
         }
 
-        if (!_mutex.WaitOne(MutexTimeout))
+        if (!TryAcquireMutex())
         {
             return; // reader is mid-copy; drop this frame rather than block the capture loop
         }
@@ -61,6 +61,23 @@ internal sealed class SharedFrameWriter : IDisposable
         }
 
         _frameReady.Set();
+    }
+
+    private bool TryAcquireMutex()
+    {
+        try
+        {
+            return _mutex.WaitOne(MutexTimeout);
+        }
+        catch (AbandonedMutexException)
+        {
+            // The mutex is also held (across processes) by the native reader
+            // running inside whatever app opened the virtual camera; if that
+            // process died while holding it, .NET still grants us ownership
+            // here - the shared region may be mid-write but we're about to
+            // overwrite it anyway, so this is safe to treat as "acquired".
+            return true;
+        }
     }
 
     public void Dispose()

@@ -89,6 +89,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
             var capture = new CameraCapture(SelectedCamera!.Index);
             capture.FrameCaptured += OnFrameCaptured;
+            capture.FrameProcessingFailed += OnFrameProcessingFailed;
             capture.Start();
             _capture = capture;
 
@@ -106,6 +107,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_capture is not null)
         {
             _capture.FrameCaptured -= OnFrameCaptured;
+            _capture.FrameProcessingFailed -= OnFrameProcessingFailed;
             _capture.Dispose(); // joins the capture thread, so no OnFrameCaptured call is still in flight after this
             _capture = null;
         }
@@ -124,6 +126,11 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         var pixelBytes = ToBgr24Bytes(cropped);
         _frameWriter?.WriteFrame(pixelBytes);
         UpdatePreview(pixelBytes, cropped.Width, cropped.Height);
+    }
+
+    private void OnFrameProcessingFailed(Exception ex)
+    {
+        Application.Current.Dispatcher.BeginInvoke(() => ErrorMessage = ex.Message);
     }
 
     private static byte[] ToBgr24Bytes(Mat bgrMat)

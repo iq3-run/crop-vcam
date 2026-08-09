@@ -24,29 +24,43 @@ internal static class CameraEnumerator
             return devices; // S_FALSE: no capture devices installed at all
         }
 
-        var index = 0;
+        // rawIndex tracks position in DirectShow's own enumeration, not how
+        // many devices we've kept - it must match what VideoCapture(index,
+        // DSHOW) expects even when we skip our own virtual camera partway
+        // through the list.
         var fetched = new IMoniker[1];
+        var rawIndex = 0;
         while (enumMoniker.Next(1, fetched, IntPtr.Zero) == 0)
         {
-            var moniker = fetched[0];
-            try
+            if (TryCreateDevice(fetched[0], rawIndex, out var device))
             {
-                var (name, clsid) = ReadFriendlyNameAndClsid(moniker);
-                if (name is null || clsid == FilterRegistrar.FilterClsid)
-                {
-                    continue; // skip our own virtual camera to avoid a feedback loop
-                }
+                devices.Add(device);
+            }
 
-                devices.Add(new CameraDevice(index, name));
-                index++;
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(moniker);
-            }
+            rawIndex++;
         }
 
         return devices;
+    }
+
+    private static bool TryCreateDevice(IMoniker moniker, int rawIndex, out CameraDevice device)
+    {
+        try
+        {
+            var (name, clsid) = ReadFriendlyNameAndClsid(moniker);
+            if (name is null || clsid == FilterRegistrar.FilterClsid)
+            {
+                device = null!;
+                return false; // unnamed device, or our own virtual camera (avoid a feedback loop)
+            }
+
+            device = new CameraDevice(rawIndex, name);
+            return true;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(moniker);
+        }
     }
 
     private static (string? Name, Guid Clsid) ReadFriendlyNameAndClsid(IMoniker moniker)

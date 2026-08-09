@@ -20,9 +20,11 @@ class CCropVCamStream : public CSourceStream {
   HRESULT OnThreadCreate() override;
 
  private:
+  void RefreshLatestFrame(long frameBytes);
+  void StampSampleTime(IMediaSample* pSample);
+
   CropVCam::SharedFrameReader reader_;
   BYTE* latestFrame_;
-  bool hasFrame_;
   REFERENCE_TIME streamPosition_;
   REFERENCE_TIME frameLengthUnits_;
 };

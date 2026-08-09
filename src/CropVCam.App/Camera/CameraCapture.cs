@@ -10,12 +10,17 @@ namespace CropVCam.App.Camera;
 /// </summary>
 internal sealed class CameraCapture : IDisposable
 {
+    private const int FrameReadRetryDelayMs = 10;
+
     private readonly int _deviceIndex;
     private CancellationTokenSource? _cancellation;
     private Thread? _captureThread;
     private VideoCapture? _videoCapture;
 
     public event Action<Mat>? FrameCaptured;
+
+    /// <summary>Raised when a <see cref="FrameCaptured"/> subscriber throws, so the capture loop can keep running.</summary>
+    public event Action<Exception>? FrameProcessingFailed;
 
     public CameraCapture(int deviceIndex)
     {
@@ -67,10 +72,25 @@ internal sealed class CameraCapture : IDisposable
         {
             if (_videoCapture is null || !_videoCapture.Read(frame) || frame.Empty())
             {
+                Thread.Sleep(FrameReadRetryDelayMs); // avoid busy-spinning while the camera is unavailable
                 continue;
             }
 
+            RaiseFrameCaptured(frame);
+        }
+    }
+
+    private void RaiseFrameCaptured(Mat frame)
+    {
+        try
+        {
             FrameCaptured?.Invoke(frame);
+        }
+        catch (Exception ex)
+        {
+            // A single bad frame (e.g. a transient shared-memory hiccup) must
+            // not take down the whole capture thread/process.
+            FrameProcessingFailed?.Invoke(ex);
         }
     }
 }

@@ -18,7 +18,6 @@ int OutputFrameBytes() { return CropVCam::kOutputWidth * CropVCam::kOutputHeight
 CCropVCamStream::CCropVCamStream(HRESULT* phr, CCropVCamSource* pParent, LPCWSTR pPinName)
     : CSourceStream(NAME("CropVCam Output Stream"), phr, reinterpret_cast<CSource*>(pParent), pPinName),
       latestFrame_(new BYTE[OutputFrameBytes()]),
-      hasFrame_(false),
       streamPosition_(0),
       frameLengthUnits_(kUnitsPerSecond / kTargetFps) {
   std::memset(latestFrame_, 0, OutputFrameBytes());
@@ -28,7 +27,6 @@ CCropVCamStream::~CCropVCamStream() { delete[] latestFrame_; }
 
 HRESULT CCropVCamStream::OnThreadCreate() {
   streamPosition_ = 0;
-  hasFrame_ = false;
   return S_OK;
 }
 
@@ -40,7 +38,9 @@ HRESULT CCropVCamStream::GetMediaType(CMediaType* pMediaType) {
   vih.AvgTimePerFrame = frameLengthUnits_;
   vih.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
   vih.bmiHeader.biWidth = CropVCam::kOutputWidth;
-  vih.bmiHeader.biHeight = CropVCam::kOutputHeight;  // positive: bottom-up DIB, standard RGB24 layout
+  // Negative: top-down DIB. SharedFrameWriter (C#) writes rows top-down, so
+  // this must stay negative or the delivered picture is vertically flipped.
+  vih.bmiHeader.biHeight = -CropVCam::kOutputHeight;
   vih.bmiHeader.biPlanes = 1;
   vih.bmiHeader.biBitCount = 24;
   vih.bmiHeader.biCompression = BI_RGB;
@@ -88,26 +88,29 @@ HRESULT CCropVCamStream::FillBuffer(IMediaSample* pSample) {
     return E_FAIL;
   }
 
-  int width = 0;
-  int height = 0;
-  int stride = 0;
-  const bool gotFrame =
-      reader_.WaitAndCopyFrame(latestFrame_, neededBytes, kWaitTimeoutMs, &width, &height, &stride);
-  if (gotFrame && width == CropVCam::kOutputWidth && height == CropVCam::kOutputHeight) {
-    hasFrame_ = true;
-  }
-  // If no fresh frame arrived (app not running yet, or a hiccup), we keep
-  // delivering the last frame we have (or the initial black one) so the
-  // stream stays alive instead of stalling the downstream consumer.
-
+  RefreshLatestFrame(neededBytes);
   std::memcpy(pData, latestFrame_, neededBytes);
   pSample->SetActualDataLength(neededBytes);
 
+  StampSampleTime(pSample);
+  return S_OK;
+}
+
+void CCropVCamStream::RefreshLatestFrame(long frameBytes) {
+  int width = 0;
+  int height = 0;
+  int stride = 0;
+  // If no fresh frame arrived (app not running yet, or a hiccup),
+  // latestFrame_ already holds the last one we have (or the initial black
+  // frame) - WaitAndCopyFrame only touches the buffer when it has a real
+  // frame to hand over - so the stream stays alive either way.
+  reader_.WaitAndCopyFrame(latestFrame_, frameBytes, kWaitTimeoutMs, &width, &height, &stride);
+}
+
+void CCropVCamStream::StampSampleTime(IMediaSample* pSample) {
   const REFERENCE_TIME start = streamPosition_;
   const REFERENCE_TIME stop = start + frameLengthUnits_;
   streamPosition_ = stop;
   pSample->SetTime(const_cast<REFERENCE_TIME*>(&start), const_cast<REFERENCE_TIME*>(&stop));
   pSample->SetSyncPoint(TRUE);
-
-  return S_OK;
 }

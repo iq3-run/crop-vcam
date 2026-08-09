@@ -75,10 +75,16 @@ internal static class FilterRegistrar
         }
     }
 
+    // Checks both the base CLSID and the video-capture-category registration
+    // DllRegisterServer writes, so a run that failed partway through (e.g.
+    // it registered the CLSID but crashed before the category instance) is
+    // retried instead of being mistaken for a complete registration.
     private static bool IsRegistered()
     {
-        using var key = Registry.CurrentUser.OpenSubKey($@"Software\Classes\CLSID\{FilterClsidString}\InprocServer32");
-        return key is not null;
+        using var clsidKey = Registry.CurrentUser.OpenSubKey($@"Software\Classes\CLSID\{FilterClsidString}\InprocServer32");
+        using var instanceKey = Registry.CurrentUser.OpenSubKey(
+            $@"Software\Classes\CLSID\{VideoInputCategoryClsid}\Instance\{FilterClsidString}");
+        return clsidKey is not null && instanceKey is not null;
     }
 
     private delegate int DllRegisterServerDelegate();
