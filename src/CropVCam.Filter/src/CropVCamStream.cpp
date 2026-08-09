@@ -30,6 +30,125 @@ HRESULT CCropVCamStream::OnThreadCreate() {
   return S_OK;
 }
 
+STDMETHODIMP CCropVCamStream::NonDelegatingQueryInterface(REFIID riid, void** ppv) {
+  if (riid == IID_IKsPropertySet) {
+    return GetInterface(static_cast<IKsPropertySet*>(this), ppv);
+  }
+  if (riid == IID_IAMStreamConfig) {
+    return GetInterface(static_cast<IAMStreamConfig*>(this), ppv);
+  }
+  return CSourceStream::NonDelegatingQueryInterface(riid, ppv);
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::Set(REFGUID /*guidPropSet*/, DWORD /*dwPropID*/,
+                                                LPVOID /*pInstanceData*/, DWORD /*cbInstanceData*/,
+                                                LPVOID /*pPropData*/, DWORD /*cbPropData*/) {
+  return E_NOTIMPL;  // we only need to answer "what category is this pin", never set one
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::Get(REFGUID guidPropSet, DWORD dwPropID, LPVOID /*pInstanceData*/,
+                                                DWORD /*cbInstanceData*/, LPVOID pPropData, DWORD cbPropData,
+                                                DWORD* pcbReturned) {
+  if (guidPropSet != AMPROPSETID_Pin || dwPropID != AMPROPERTY_PIN_CATEGORY) {
+    return E_PROP_SET_UNSUPPORTED;
+  }
+
+  *pcbReturned = sizeof(GUID);
+  if (pPropData == nullptr) {
+    return S_OK;  // caller is only asking how large a buffer it needs
+  }
+  if (cbPropData < sizeof(GUID)) {
+    return E_UNEXPECTED;
+  }
+
+  *static_cast<GUID*>(pPropData) = PIN_CATEGORY_CAPTURE;
+  return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::QuerySupported(REFGUID guidPropSet, DWORD dwPropID, DWORD* pTypeSupport) {
+  if (guidPropSet != AMPROPSETID_Pin || dwPropID != AMPROPERTY_PIN_CATEGORY) {
+    return E_PROP_SET_UNSUPPORTED;
+  }
+
+  *pTypeSupport = KSPROPERTY_SUPPORT_GET;
+  return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::SetFormat(AM_MEDIA_TYPE* pmt) {
+  // Only one fixed format is ever offered (see GetStreamCaps), so accepting
+  // a request for anything else would be a lie - reject it instead.
+  CMediaType ourType;
+  HRESULT hr = GetMediaType(&ourType);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  return (pmt != nullptr && CMediaType(*pmt) == ourType) ? S_OK : E_INVALIDARG;
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::GetFormat(AM_MEDIA_TYPE** ppmt) {
+  CheckPointer(ppmt, E_POINTER);
+
+  CMediaType mt;
+  HRESULT hr = GetMediaType(&mt);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  *ppmt = CreateMediaType(&mt);
+  return *ppmt != nullptr ? S_OK : E_OUTOFMEMORY;
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::GetNumberOfCapabilities(int* piCount, int* piSize) {
+  CheckPointer(piCount, E_POINTER);
+  CheckPointer(piSize, E_POINTER);
+
+  *piCount = 1;
+  *piSize = sizeof(VIDEO_STREAM_CONFIG_CAPS);
+  return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CCropVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TYPE** ppmt, BYTE* pSCC) {
+  CheckPointer(ppmt, E_POINTER);
+  CheckPointer(pSCC, E_POINTER);
+  if (iIndex != 0) {
+    return S_FALSE;  // only one capability, and the caller has already seen it
+  }
+
+  CMediaType mt;
+  HRESULT hr = GetMediaType(&mt);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  *ppmt = CreateMediaType(&mt);
+  if (*ppmt == nullptr) {
+    return E_OUTOFMEMORY;
+  }
+
+  auto* caps = reinterpret_cast<VIDEO_STREAM_CONFIG_CAPS*>(pSCC);
+  ZeroMemory(caps, sizeof(VIDEO_STREAM_CONFIG_CAPS));
+  caps->guid = FORMAT_VideoInfo;
+  caps->InputSize.cx = CropVCam::kOutputWidth;
+  caps->InputSize.cy = CropVCam::kOutputHeight;
+  caps->MinCroppingSize = caps->InputSize;
+  caps->MaxCroppingSize = caps->InputSize;
+  caps->CropGranularityX = 1;
+  caps->CropGranularityY = 1;
+  caps->CropAlignX = 1;
+  caps->CropAlignY = 1;
+  caps->MinOutputSize = caps->InputSize;
+  caps->MaxOutputSize = caps->InputSize;
+  caps->OutputGranularityX = 1;
+  caps->OutputGranularityY = 1;
+  caps->MinFrameInterval = frameLengthUnits_;
+  caps->MaxFrameInterval = frameLengthUnits_;
+  caps->MinBitsPerSecond = OutputFrameBytes() * 8 * kTargetFps;
+  caps->MaxBitsPerSecond = caps->MinBitsPerSecond;
+
+  return S_OK;
+}
+
 HRESULT CCropVCamStream::GetMediaType(CMediaType* pMediaType) {
   CheckPointer(pMediaType, E_POINTER);
 
