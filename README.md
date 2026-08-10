@@ -60,6 +60,19 @@ dotnet run --project src/CropVCam.App/CropVCam.App.csproj
 平易な文面）。配布用zipを作成する際は、ビルド成果物一式（`CropVCam.App.exe` とその出力ディレクトリ）と
 一緒に `README.txt` を同梱すること。
 
+フィルタ（Release構成でビルド済みであること）とアプリを、self-contained版（.NETランタイム同梱、対象PCに
+.NET未インストールでも動作）と framework-dependent版（[.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+が対象PCに必要、配布サイズが小さい）の2種類でpublishする:
+
+```bash
+dotnet publish src/CropVCam.App/CropVCam.App.csproj -c Release -r win-x64 --self-contained true -o publish/self-contained
+dotnet publish src/CropVCam.App/CropVCam.App.csproj -c Release -r win-x64 --self-contained false -o publish/framework-dependent
+```
+
+`dotnet publish` はcsprojの `None Include` 経由で `CropVCam.Filter/build/CropVCamFilter.dll`（Debug構成の
+既定出力先）をコピーするため、Release構成のフィルタを配布する場合は publish 後に
+`CropVCam.Filter/build-release/CropVCamFilter.dll` で上書きすること。
+
 ## 既知の制約 / 未検証事項
 
 - 仮想カメラの出力解像度は 1280x720 固定（`SharedFrameProtocol` で定義）。
