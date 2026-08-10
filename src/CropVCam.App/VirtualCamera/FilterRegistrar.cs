@@ -33,6 +33,30 @@ internal static class FilterRegistrar
             throw new FileNotFoundException($"仮想カメラフィルタが見つかりません: {filterDllPath}", filterDllPath);
         }
 
+        RunInLoadedLibrary(filterDllPath, RunDllRegisterServer);
+    }
+
+    // Best-effort by design: called on app exit, so a failure here (missing
+    // DLL, load failure, DllUnregisterServer error) must never block shutdown.
+    // Safe to call even if EnsureRegistered was never called this session -
+    // DllUnregisterServer treats "already unregistered" as success.
+    public static void TryUnregister(string filterDllPath)
+    {
+        try
+        {
+            if (File.Exists(filterDllPath))
+            {
+                RunInLoadedLibrary(filterDllPath, RunDllUnregisterServer);
+            }
+        }
+        catch (Exception)
+        {
+            // Cleanup best-effort on exit - swallow and let shutdown continue.
+        }
+    }
+
+    private static void RunInLoadedLibrary(string filterDllPath, Action<IntPtr> run)
+    {
         var module = NativeMethods.LoadLibrary(filterDllPath);
         if (module == IntPtr.Zero)
         {
@@ -41,7 +65,7 @@ internal static class FilterRegistrar
 
         try
         {
-            RunDllRegisterServer(module);
+            run(module);
         }
         finally
         {
@@ -75,6 +99,18 @@ internal static class FilterRegistrar
         }
     }
 
+    private static void RunDllUnregisterServer(IntPtr module)
+    {
+        var procAddress = NativeMethods.GetProcAddress(module, "DllUnregisterServer");
+        if (procAddress == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var unregister = Marshal.GetDelegateForFunctionPointer<DllUnregisterServerDelegate>(procAddress);
+        unregister();
+    }
+
     // Checks both the base CLSID and the video-capture-category registration
     // DllRegisterServer writes, so a run that failed partway through (e.g.
     // it registered the CLSID but crashed before the category instance) is
@@ -88,6 +124,8 @@ internal static class FilterRegistrar
     }
 
     private delegate int DllRegisterServerDelegate();
+
+    private delegate int DllUnregisterServerDelegate();
 
     private static class NativeMethods
     {

@@ -13,6 +13,12 @@ public partial class App : Application
 
     private SingleInstance? _singleInstance;
 
+    // False for a second-instance process, which never registers anything
+    // itself and shuts down immediately after relaying to the first instance
+    // (still running, still using the registration) - OnExit must not
+    // unregister the filter in that case.
+    private bool _isPrimaryInstance;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -30,6 +36,7 @@ public partial class App : Application
             return;
         }
 
+        _isPrimaryInstance = true;
         _singleInstance.ListenForActivationRequests(ActivateMainWindow);
 
         var window = new MainWindow();
@@ -39,6 +46,11 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        if (_isPrimaryInstance)
+        {
+            MainViewModel.UnregisterFilter();
+        }
+
         _singleInstance?.Dispose();
         base.OnExit(e);
     }
