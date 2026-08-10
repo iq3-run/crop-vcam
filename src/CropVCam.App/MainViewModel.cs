@@ -83,8 +83,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         ErrorMessage = null;
         try
         {
-            var filterDllPath = Path.Combine(AppContext.BaseDirectory, FilterDllFileName);
-            FilterRegistrar.EnsureRegistered(filterDllPath);
+            FilterRegistrar.EnsureRegistered(ResolveFilterDllPath());
             FilterRegistrar.SetFriendlyName(OutputName);
 
             _frameWriter = new SharedFrameWriter();
@@ -169,6 +168,14 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             }
         });
     }
+
+    // Called from App.OnExit, separately from StopStreaming/Dispose - the
+    // "停止" button only halts streaming and deliberately leaves the
+    // registration in place for the next "開始"; only a full app exit
+    // cleans up the registry.
+    public static void UnregisterFilter() => FilterRegistrar.TryUnregister(ResolveFilterDllPath());
+
+    private static string ResolveFilterDllPath() => Path.Combine(AppContext.BaseDirectory, FilterDllFileName);
 
     public void Dispose() => StopStreaming();
 }
