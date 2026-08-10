@@ -10,6 +10,9 @@ out/
 vcpkg_installed/
 CMakeUserPresets.json
 
+# dotnet publish output (release packaging)
+publish/
+
 # Visual Studio
 .vs/
 *.suo
