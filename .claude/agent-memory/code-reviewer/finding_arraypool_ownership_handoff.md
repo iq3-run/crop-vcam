@@ -32,7 +32,9 @@ new code path holds a reference to the rented array past the point
 `WriteFrame`/the dispatched `BitmapSource.Create` call returns, (2) any
 `ArrayPool.Rent`/`Return` pair still has exactly one `Return` per `Rent`
 reachable from every exception path, (3) if camera resolution can change
-mid-session, note that switching frame size moves the pool to a different
-size bucket — old-size buffers become unrecoverable garbage until GC, not a
-correctness bug, just memory not maximally reused (not raised as a finding
-in the #13 review since it's pre-existing scope, not new).
+mid-session, note that switching frame size moves subsequent `Rent`/`Return`
+calls to a different size bucket — old-size buffers stay in their original
+bucket and remain reusable by a later `Rent` that matches that size (e.g. the
+resolution reverting), though the pool may discard excess buffers beyond
+`maxArraysPerBucket`; not raised as a finding in the #13 review since it's
+pre-existing scope, not new.
