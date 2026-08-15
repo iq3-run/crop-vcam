@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -19,6 +20,13 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     public const double MaxMagnification = 4.0;
     private const string DefaultOutputName = "Cropped Virtual Camera";
     private const string FilterDllFileName = "CropVCamFilter.dll";
+
+    // ArrayPool<byte>.Shared caps pooled arrays at ~1MiB; every frame here
+    // (6.2MiB at 1080p, 23.7MiB at 4K) exceeds that, so .Shared would just
+    // allocate fresh each time and defeat the point. A dedicated pool sized
+    // for our own max frame keeps these buffers actually reused.
+    private static readonly ArrayPool<byte> FrameBufferPool =
+        ArrayPool<byte>.Create(maxArrayLength: SharedFrameProtocol.MaxPayloadBytes, maxArraysPerBucket: 2);
 
     private CameraCapture? _capture;
     private SharedFrameWriter? _frameWriter;
@@ -171,9 +179,22 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         var (outputWidth, outputHeight) = ClampToSharedRegionLimit(sourceFrame.Width, sourceFrame.Height);
         using var cropped = CenterCropScaler.CropAndScale(sourceFrame, magnification, outputWidth, outputHeight);
 
-        var pixelBytes = ToBgr24Bytes(cropped);
-        _frameWriter?.WriteFrame(pixelBytes, cropped.Width, cropped.Height);
-        UpdatePreview(pixelBytes, cropped.Width, cropped.Height);
+        var byteCount = cropped.Width * cropped.Height * 3;
+        var pixelBytes = FrameBufferPool.Rent(byteCount);
+        var ownedByPreview = false;
+        try
+        {
+            Marshal.Copy(cropped.Data, pixelBytes, 0, byteCount);
+            _frameWriter?.WriteFrame(pixelBytes, cropped.Width, cropped.Height);
+            ownedByPreview = UpdatePreview(pixelBytes, cropped.Width, cropped.Height);
+        }
+        finally
+        {
+            if (!ownedByPreview)
+            {
+                FrameBufferPool.Return(pixelBytes);
+            }
+        }
     }
 
     // Output tracks the physical camera's own resolution 1:1 (magnification
@@ -198,21 +219,17 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         Application.Current.Dispatcher.BeginInvoke(() => ErrorMessage = ex.Message);
     }
 
-    private static byte[] ToBgr24Bytes(Mat bgrMat)
-    {
-        var bytes = new byte[bgrMat.Width * bgrMat.Height * 3];
-        Marshal.Copy(bgrMat.Data, bytes, 0, bytes.Length);
-        return bytes;
-    }
-
-    private void UpdatePreview(byte[] bgrPixels, int width, int height)
+    // Returns whether ownership of bgrPixels was handed off to the dispatched
+    // callback (which returns it to FrameBufferPool once done) - false means
+    // the frame was dropped and the caller must return it immediately.
+    private bool UpdatePreview(byte[] bgrPixels, int width, int height)
     {
         // If the UI thread is stalled, dispatcher-queued updates (each
         // holding a ~2.7MB frame) would otherwise pile up unbounded; drop
         // frames instead of queuing behind ones that haven't rendered yet.
         if (Interlocked.Exchange(ref _previewUpdatePending, 1) == 1)
         {
-            return;
+            return false;
         }
 
         Application.Current.Dispatcher.BeginInvoke(() =>
@@ -225,9 +242,12 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             }
             finally
             {
+                FrameBufferPool.Return(bgrPixels);
                 Interlocked.Exchange(ref _previewUpdatePending, 0);
             }
         });
+
+        return true;
     }
 
     // Called from App.OnExit, separately from StopStreaming/Dispose - the
