@@ -23,14 +23,25 @@ constexpr int kPixelFormatBgr24 = 1;
 //  28  (4 bytes reserved/padding)
 constexpr int kHeaderSize = 32;
 
-// The virtual camera negotiates a single fixed output format so the
-// DirectShow pin connection never has to renegotiate mid-stream. The app
-// always resizes its cropped frame to fill this canvas before writing it,
-// regardless of the physical camera's native resolution.
-constexpr int kOutputWidth = 1280;
-constexpr int kOutputHeight = 720;
-constexpr long long kOutputPayloadBytes = static_cast<long long>(kOutputWidth) * kOutputHeight * 3;
-constexpr long long kSharedRegionBytes = kHeaderSize + kOutputPayloadBytes;
+// Upper bound the shared region is sized for. The app writes frames sized to
+// the physical camera's own resolution (clamped to this if a camera exceeds
+// it) rather than a fixed canvas - see CropVCam.App's MainViewModel.OnFrameCaptured.
+// Must stay in lockstep with MaxWidth/MaxHeight on the C# side: the region
+// size is fixed at creation time and cannot be resized later, and a past
+// drift between the two sides' sizes made the filter unable to open the
+// mapping at all.
+constexpr int kMaxWidth = 3840;
+constexpr int kMaxHeight = 2160;
+constexpr long long kMaxPayloadBytes = static_cast<long long>(kMaxWidth) * kMaxHeight * 3;
+constexpr long long kSharedRegionBytes = kHeaderSize + kMaxPayloadBytes;
+
+// The virtual camera negotiates a single fixed output format per pin
+// connection (DirectShow doesn't renegotiate mid-stream) - see
+// CCropVCamStream::EnsureFormatResolved. This is what it reports when
+// queried before any real frame has been observed in shared memory (e.g.
+// CropVCam.App has never run yet).
+constexpr int kDefaultWidth = 1280;
+constexpr int kDefaultHeight = 720;
 
 inline const wchar_t* MapName() { return L"Local\\CropVCam_Data"; }
 inline const wchar_t* MutexName() { return L"Local\\CropVCam_Mutex"; }

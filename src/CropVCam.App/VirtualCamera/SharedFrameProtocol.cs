@@ -11,11 +11,17 @@ internal static class SharedFrameProtocol
     public const int PixelFormatBgr24 = 1;
     public const int HeaderSize = 32;
 
-    public const int OutputWidth = 1280;
-    public const int OutputHeight = 720;
-    public const int OutputStrideBytes = OutputWidth * 3;
-    public const int OutputPayloadBytes = OutputStrideBytes * OutputHeight;
-    public const long SharedRegionBytes = HeaderSize + OutputPayloadBytes;
+    // Upper bound the shared region is sized for. Output frames track the
+    // physical camera's own resolution (see MainViewModel.OnFrameCaptured),
+    // clamped to this if a camera exceeds it. Must stay in lockstep with
+    // kMaxWidth/kMaxHeight on the C++ side - the region size is fixed at
+    // creation time and cannot be resized later, and a past drift between
+    // the two sides' sizes made the filter unable to open the mapping at all.
+    public const int MaxWidth = 3840;
+    public const int MaxHeight = 2160;
+    public const int MaxStrideBytes = MaxWidth * 3;
+    public const int MaxPayloadBytes = MaxStrideBytes * MaxHeight;
+    public const long SharedRegionBytes = HeaderSize + MaxPayloadBytes;
 
     public const string MapName = "Local\\CropVCam_Data";
     public const string MutexName = "Local\\CropVCam_Mutex";

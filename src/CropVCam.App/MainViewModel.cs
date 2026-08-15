@@ -60,8 +60,10 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             CameraDevices.Add(device);
         }
 
-        SelectedCamera = CameraDevices.FirstOrDefault();
+        SelectedCamera = CameraDevices.FirstOrDefault(); // triggers OnSelectedCameraChanged, which starts preview capture
     }
+
+    partial void OnSelectedCameraChanged(CameraDevice? value) => RestartPreviewCapture(value);
 
     [RelayCommand(CanExecute = nameof(CanStartStop))]
     private void StartStop()
@@ -78,21 +80,67 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private bool CanStartStop() => IsRunning || SelectedCamera is not null;
 
+    // Preview capture runs continuously once a camera is selected, independent
+    // of the "開始"/"停止" (streaming) lifecycle below - so the user can see
+    // the crop/zoom before ever registering the virtual camera. This is also
+    // what lets the native filter learn the physical camera's real resolution
+    // before a downstream app (e.g. Zoom) connects to it (see SharedFrameWriter.WriteFrame).
+    private void RestartPreviewCapture(CameraDevice? device)
+    {
+        StopPreviewCapture();
+        if (device is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var capture = new CameraCapture(device.Index);
+            capture.FrameCaptured += OnFrameCaptured;
+            capture.FrameProcessingFailed += OnFrameProcessingFailed;
+            capture.Start();
+            _capture = capture;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void StopPreviewCapture()
+    {
+        if (_capture is null)
+        {
+            return;
+        }
+
+        _capture.FrameCaptured -= OnFrameCaptured;
+        _capture.FrameProcessingFailed -= OnFrameProcessingFailed;
+        _capture.Dispose(); // joins the capture thread, so no OnFrameCaptured call is still in flight after this
+        _capture = null;
+    }
+
     private void StartStreaming()
     {
         ErrorMessage = null;
+
+        // Preview capture normally already runs from camera selection, but
+        // retry here in case it failed earlier (e.g. camera was busy then).
+        if (_capture is null)
+        {
+            RestartPreviewCapture(SelectedCamera);
+        }
+        if (_capture is null)
+        {
+            return; // RestartPreviewCapture already surfaced the failure via ErrorMessage
+        }
+
         try
         {
             FilterRegistrar.EnsureRegistered(ResolveFilterDllPath());
             FilterRegistrar.SetFriendlyName(OutputName);
 
             _frameWriter = new SharedFrameWriter();
-
-            var capture = new CameraCapture(SelectedCamera!.Index);
-            capture.FrameCaptured += OnFrameCaptured;
-            capture.FrameProcessingFailed += OnFrameProcessingFailed;
-            capture.Start();
-            _capture = capture;
 
             IsRunning = true;
         }
@@ -103,16 +151,11 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    // Only stops the virtual-camera broadcast (registration stays, frame
+    // writing stops) - preview capture on the physical camera keeps running
+    // so the user still sees a live picture while stopped.
     private void StopStreaming()
     {
-        if (_capture is not null)
-        {
-            _capture.FrameCaptured -= OnFrameCaptured;
-            _capture.FrameProcessingFailed -= OnFrameProcessingFailed;
-            _capture.Dispose(); // joins the capture thread, so no OnFrameCaptured call is still in flight after this
-            _capture = null;
-        }
-
         _frameWriter?.Dispose();
         _frameWriter = null;
 
@@ -124,12 +167,29 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
         // The slider clamps itself, but the bound TextBox doesn't - guard
         // against a typed 0/negative/huge value reaching the crop math.
         var magnification = Math.Clamp(Magnification, MinMagnification, MaxMagnification);
-        using var cropped = CenterCropScaler.CropAndScale(
-            sourceFrame, magnification, SharedFrameProtocol.OutputWidth, SharedFrameProtocol.OutputHeight);
+        var (outputWidth, outputHeight) = ClampToSharedRegionLimit(sourceFrame.Width, sourceFrame.Height);
+        using var cropped = CenterCropScaler.CropAndScale(sourceFrame, magnification, outputWidth, outputHeight);
 
         var pixelBytes = ToBgr24Bytes(cropped);
-        _frameWriter?.WriteFrame(pixelBytes);
+        _frameWriter?.WriteFrame(pixelBytes, cropped.Width, cropped.Height);
         UpdatePreview(pixelBytes, cropped.Width, cropped.Height);
+    }
+
+    // Output tracks the physical camera's own resolution 1:1 (magnification
+    // 1.0 is a no-op crop, scaled back up to that same size). The shared
+    // memory region is only sized for SharedFrameProtocol.MaxWidth/MaxHeight
+    // though, so a camera beyond that gets scaled down first, aspect ratio preserved.
+    private static (int Width, int Height) ClampToSharedRegionLimit(int width, int height)
+    {
+        if (width <= SharedFrameProtocol.MaxWidth && height <= SharedFrameProtocol.MaxHeight)
+        {
+            return (width, height);
+        }
+
+        var scale = Math.Min(
+            (double)SharedFrameProtocol.MaxWidth / width,
+            (double)SharedFrameProtocol.MaxHeight / height);
+        return (Math.Max(1, (int)Math.Round(width * scale)), Math.Max(1, (int)Math.Round(height * scale)));
     }
 
     private void OnFrameProcessingFailed(Exception ex)
@@ -177,5 +237,9 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static string ResolveFilterDllPath() => Path.Combine(AppContext.BaseDirectory, FilterDllFileName);
 
-    public void Dispose() => StopStreaming();
+    public void Dispose()
+    {
+        StopStreaming();
+        StopPreviewCapture();
+    }
 }
