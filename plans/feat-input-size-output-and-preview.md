@@ -2,7 +2,7 @@
 
 - Issue: https://github.com/iq3-run/crop-vcam/issues/8
 - User Prompt: `docs/20260812_追加仕様.txt` 参照
-  ```
+  ```text
   ・入力のサイズで出力する
   ・開始前から、プレビューを見たい
   　起動後は選択しているカメラを他のアプリで開けないが、それは許容

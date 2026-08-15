@@ -217,8 +217,12 @@ HRESULT CCropVCamStream::DecideBufferSize(IMemAllocator* pAlloc, ALLOCATOR_PROPE
   CheckPointer(pProperties, E_POINTER);
 
   CAutoLock lock(m_pFilter->pStateLock());
-  EnsureFormatResolved();
-
+  // Not EnsureFormatResolved() here: DirectShow always calls GetMediaType
+  // (which resolves the format) before DecideBufferSize within one Connect()
+  // cycle, so width_/height_ are already settled. Re-peeking here too would
+  // open a window where a frame arriving between the two peeks could resolve
+  // a different size in each, sizing this buffer for a format GetMediaType
+  // never actually reported to the downstream consumer.
   pProperties->cBuffers = 2;
   pProperties->cbBuffer = FrameBytes();
 

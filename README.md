@@ -93,6 +93,7 @@ dotnet publish src/CropVCam.App/CropVCam.App.csproj -c Release -r win-x64 --self
 - 物理カメラのキャプチャは「開始」ボタンではなくカメラ選択と同時に始まり、アプリ終了まで
   継続する（プレビュー表示のため）。これにより、アプリ起動中は選択中の物理カメラを他アプリ
   から開けなくなる。
+- 入力解像度追従・開始前プレビューは実装レベルでの確認まで（Zoom等の実機での動作確認は未実施）。
 - フィルタは `IKsPropertySet`（ピンカテゴリ = `PIN_CATEGORY_CAPTURE`）と
   `IAMStreamConfig`（フォーマット列挙・ネゴシエーション）を実装している。
   どちらか一方でも欠けると、デバイス一覧には表示されるのに実際に開こうとすると

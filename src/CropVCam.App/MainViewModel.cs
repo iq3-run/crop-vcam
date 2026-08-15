@@ -100,6 +100,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             capture.FrameProcessingFailed += OnFrameProcessingFailed;
             capture.Start();
             _capture = capture;
+            ErrorMessage = null; // clear any error from a previously-selected camera that failed to open
         }
         catch (Exception ex)
         {
