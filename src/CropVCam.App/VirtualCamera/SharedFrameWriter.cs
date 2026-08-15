@@ -26,8 +26,10 @@ internal sealed class SharedFrameWriter : IDisposable
     }
 
     /// <param name="bgr24Pixels">
-    /// Exactly <paramref name="width"/> x <paramref name="height"/> pixels,
-    /// top-down, 3 bytes per pixel (B, G, R). Both dimensions must be within
+    /// At least <paramref name="width"/> x <paramref name="height"/> pixels,
+    /// top-down, 3 bytes per pixel (B, G, R) - callers may pass a pooled
+    /// array that's larger than the payload, so only the first
+    /// width*height*3 bytes are read. Both dimensions must be within
     /// <see cref="SharedFrameProtocol.MaxWidth"/> / <see cref="SharedFrameProtocol.MaxHeight"/>
     /// - the shared region is sized for that upper bound and cannot hold more.
     /// </param>
@@ -44,10 +46,10 @@ internal sealed class SharedFrameWriter : IDisposable
 
         var strideBytes = width * 3;
         var payloadBytes = strideBytes * height;
-        if (bgr24Pixels.Length != payloadBytes)
+        if (bgr24Pixels.Length < payloadBytes)
         {
             throw new ArgumentException(
-                $"フレームサイズが不正です。期待値={payloadBytes}, 実際={bgr24Pixels.Length}",
+                $"フレームサイズが不正です。期待値={payloadBytes}以上, 実際={bgr24Pixels.Length}",
                 nameof(bgr24Pixels));
         }
 
@@ -65,7 +67,7 @@ internal sealed class SharedFrameWriter : IDisposable
             _view.Write(12, strideBytes);
             _view.Write(16, SharedFrameProtocol.PixelFormatBgr24);
             _view.Write(20, _sequence);
-            _view.WriteArray(SharedFrameProtocol.HeaderSize, bgr24Pixels, 0, bgr24Pixels.Length);
+            _view.WriteArray(SharedFrameProtocol.HeaderSize, bgr24Pixels, 0, payloadBytes);
         }
         finally
         {
