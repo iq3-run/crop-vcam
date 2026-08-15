@@ -1,3 +1,4 @@
 - [crop-vcam project overview](project_crop_vcam_overview.md) — two-language structure, non-admin constraint, exclude baseclasses/ from style review
 - [Shared-region size mismatch finding](finding_shared_region_size_mismatch.md) — recurring risk class: check MMF capacity, not just header field offsets, stay in sync across C#/C++
 - [Multi-line WHY comments are deliberate](style_multiline_why_comments.md) — don't flag 3-5 line WHY comment blocks in CropVCam.App as a cap violation, it's the established repo style
+- [Agent-memory path cited in shipped comments](style_agent_memory_path_in_comments.md) — flag `.claude/agent-memory/...` file pointers in code comments as a rotting reference, keep the WHY inline instead

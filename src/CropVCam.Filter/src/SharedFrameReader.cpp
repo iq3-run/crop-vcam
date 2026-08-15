@@ -4,6 +4,13 @@
 
 #include "SharedFrameProtocol.h"
 
+namespace {
+// How long TryPeekFrameSize waits for the writer's mutex before giving up -
+// this runs during format negotiation, not the streaming loop, so it must
+// not block the DirectShow graph-building thread for long.
+constexpr DWORD kPeekMutexWaitMs = 20;
+}  // namespace
+
 namespace CropVCam {
 
 SharedFrameReader::~SharedFrameReader() { Close(); }
@@ -54,12 +61,45 @@ bool SharedFrameReader::EnsureOpen() {
   return true;
 }
 
-bool SharedFrameReader::WaitAndCopyFrame(BYTE* destBuffer, long destCapacityBytes, DWORD timeoutMs,
-                                          int* outWidth, int* outHeight, int* outStrideBytes) {
+bool SharedFrameReader::TryReadValidHeader(int* outWidth, int* outHeight) {
+  const auto magic = *reinterpret_cast<const unsigned long*>(view_ + 0);
+  const int width = *reinterpret_cast<const int*>(view_ + 4);
+  const int height = *reinterpret_cast<const int*>(view_ + 8);
+  const int stride = *reinterpret_cast<const int*>(view_ + 12);
+
+  if (magic != kFrameMagic || width < 1 || width > kMaxWidth || height < 1 || height > kMaxHeight ||
+      stride != width * 3) {
+    return false;
+  }
+
+  *outWidth = width;
+  *outHeight = height;
+  return true;
+}
+
+bool SharedFrameReader::TryPeekFrameSize(int* outWidth, int* outHeight) {
   if (!EnsureOpen()) {
     return false;
   }
-  if (destCapacityBytes < kOutputPayloadBytes) {
+
+  const DWORD waitResult = WaitForSingleObject(mutex_, kPeekMutexWaitMs);
+  if (waitResult != WAIT_OBJECT_0 && waitResult != WAIT_ABANDONED) {
+    return false;  // writer is mid-write right now; the caller will ask again
+  }
+
+  const bool valid = TryReadValidHeader(outWidth, outHeight);
+  ReleaseMutex(mutex_);
+  return valid;
+}
+
+bool SharedFrameReader::WaitAndCopyFrame(BYTE* destBuffer, long destCapacityBytes, DWORD timeoutMs,
+                                          int expectedWidth, int expectedHeight) {
+  if (!EnsureOpen()) {
+    return false;
+  }
+
+  const long long expectedPayloadBytes = static_cast<long long>(expectedWidth) * expectedHeight * 3;
+  if (destCapacityBytes < expectedPayloadBytes) {
     return false;
   }
 
@@ -82,23 +122,11 @@ bool SharedFrameReader::WaitAndCopyFrame(BYTE* destBuffer, long destCapacityByte
   // stay stuck forever once the writer restarts.
 
   bool copied = false;
-  const auto magic = *reinterpret_cast<const unsigned long*>(view_ + 0);
-  if (magic == kFrameMagic) {
-    // The format is fixed - validate the header against the one shape we
-    // accept rather than trusting width/height/stride (untrusted, since
-    // any process in this login session could have created this shared
-    // section) enough to multiply them into a copy length.
-    const int width = *reinterpret_cast<const int*>(view_ + 4);
-    const int height = *reinterpret_cast<const int*>(view_ + 8);
-    const int stride = *reinterpret_cast<const int*>(view_ + 12);
-
-    if (width == kOutputWidth && height == kOutputHeight && stride == kOutputWidth * 3) {
-      std::memcpy(destBuffer, view_ + kHeaderSize, static_cast<size_t>(kOutputPayloadBytes));
-      *outWidth = width;
-      *outHeight = height;
-      *outStrideBytes = stride;
-      copied = true;
-    }
+  int width = 0;
+  int height = 0;
+  if (TryReadValidHeader(&width, &height) && width == expectedWidth && height == expectedHeight) {
+    std::memcpy(destBuffer, view_ + kHeaderSize, static_cast<size_t>(expectedPayloadBytes));
+    copied = true;
   }
 
   ReleaseMutex(mutex_);

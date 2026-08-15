@@ -44,6 +44,8 @@ class CCropVCamStream : public CSourceStream, public IKsPropertySet, public IAMS
   HRESULT STDMETHODCALLTYPE GetStreamCaps(int iIndex, AM_MEDIA_TYPE** ppmt, BYTE* pSCC) override;
 
  private:
+  void EnsureFormatResolved();
+  long FrameBytes() const;
   void RefreshLatestFrame(long frameBytes);
   void StampSampleTime(IMediaSample* pSample);
 
@@ -51,4 +53,13 @@ class CCropVCamStream : public CSourceStream, public IKsPropertySet, public IAMS
   BYTE* latestFrame_;
   REFERENCE_TIME streamPosition_;
   REFERENCE_TIME frameLengthUnits_;
+
+  // The format negotiated for this pin connection - resolved once (from the
+  // physical camera's actual resolution, via reader_.TryPeekFrameSize) and
+  // then held fixed for the connection's lifetime, since DirectShow doesn't
+  // renegotiate mid-stream. Starts at the fallback default and is only ever
+  // updated by EnsureFormatResolved, before the first real value sticks.
+  int width_;
+  int height_;
+  bool formatResolved_;
 };

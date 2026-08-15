@@ -26,16 +26,28 @@ internal sealed class SharedFrameWriter : IDisposable
     }
 
     /// <param name="bgr24Pixels">
-    /// Exactly <see cref="SharedFrameProtocol.OutputWidth"/> x
-    /// <see cref="SharedFrameProtocol.OutputHeight"/> pixels, top-down,
-    /// 3 bytes per pixel (B, G, R).
+    /// Exactly <paramref name="width"/> x <paramref name="height"/> pixels,
+    /// top-down, 3 bytes per pixel (B, G, R). Both dimensions must be within
+    /// <see cref="SharedFrameProtocol.MaxWidth"/> / <see cref="SharedFrameProtocol.MaxHeight"/>
+    /// - the shared region is sized for that upper bound and cannot hold more.
     /// </param>
-    public void WriteFrame(byte[] bgr24Pixels)
+    public void WriteFrame(byte[] bgr24Pixels, int width, int height)
     {
-        if (bgr24Pixels.Length != SharedFrameProtocol.OutputPayloadBytes)
+        if (width <= 0 || width > SharedFrameProtocol.MaxWidth)
+        {
+            throw new ArgumentException($"幅が不正です。幅={width} (上限 {SharedFrameProtocol.MaxWidth})", nameof(width));
+        }
+        if (height <= 0 || height > SharedFrameProtocol.MaxHeight)
+        {
+            throw new ArgumentException($"高さが不正です。高さ={height} (上限 {SharedFrameProtocol.MaxHeight})", nameof(height));
+        }
+
+        var strideBytes = width * 3;
+        var payloadBytes = strideBytes * height;
+        if (bgr24Pixels.Length != payloadBytes)
         {
             throw new ArgumentException(
-                $"フレームサイズが不正です。期待値={SharedFrameProtocol.OutputPayloadBytes}, 実際={bgr24Pixels.Length}",
+                $"フレームサイズが不正です。期待値={payloadBytes}, 実際={bgr24Pixels.Length}",
                 nameof(bgr24Pixels));
         }
 
@@ -48,9 +60,9 @@ internal sealed class SharedFrameWriter : IDisposable
         {
             _sequence++;
             _view.Write(0, SharedFrameProtocol.FrameMagic);
-            _view.Write(4, SharedFrameProtocol.OutputWidth);
-            _view.Write(8, SharedFrameProtocol.OutputHeight);
-            _view.Write(12, SharedFrameProtocol.OutputStrideBytes);
+            _view.Write(4, width);
+            _view.Write(8, height);
+            _view.Write(12, strideBytes);
             _view.Write(16, SharedFrameProtocol.PixelFormatBgr24);
             _view.Write(20, _sequence);
             _view.WriteArray(SharedFrameProtocol.HeaderSize, bgr24Pixels, 0, bgr24Pixels.Length);

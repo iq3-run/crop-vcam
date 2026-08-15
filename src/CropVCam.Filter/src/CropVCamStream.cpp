@@ -13,15 +13,21 @@ constexpr DWORD kWaitTimeoutMs = 100;
 constexpr REFERENCE_TIME kUnitsPerSecond = 10'000'000;
 constexpr int kTargetFps = 30;
 
-int OutputFrameBytes() { return CropVCam::kOutputWidth * CropVCam::kOutputHeight * 3; }
+// latestFrame_ is sized for the largest frame the protocol allows so it
+// never needs reallocating once the pin's actual (smaller-or-equal) format
+// is resolved.
+constexpr long long kMaxFrameBufferBytes = static_cast<long long>(CropVCam::kMaxWidth) * CropVCam::kMaxHeight * 3;
 }  // namespace
 
 CCropVCamStream::CCropVCamStream(HRESULT* phr, CCropVCamSource* pParent, LPCWSTR pPinName)
     : CSourceStream(NAME("CropVCam Output Stream"), phr, static_cast<CSource*>(pParent), pPinName),
-      latestFrame_(new BYTE[OutputFrameBytes()]),
+      latestFrame_(new BYTE[static_cast<size_t>(kMaxFrameBufferBytes)]),
       streamPosition_(0),
-      frameLengthUnits_(kUnitsPerSecond / kTargetFps) {
-  std::memset(latestFrame_, 0, OutputFrameBytes());
+      frameLengthUnits_(kUnitsPerSecond / kTargetFps),
+      width_(CropVCam::kDefaultWidth),
+      height_(CropVCam::kDefaultHeight),
+      formatResolved_(false) {
+  std::memset(latestFrame_, 0, static_cast<size_t>(kMaxFrameBufferBytes));
 }
 
 CCropVCamStream::~CCropVCamStream() { delete[] latestFrame_; }
@@ -131,8 +137,8 @@ HRESULT STDMETHODCALLTYPE CCropVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TY
   auto* caps = reinterpret_cast<VIDEO_STREAM_CONFIG_CAPS*>(pSCC);
   ZeroMemory(caps, sizeof(VIDEO_STREAM_CONFIG_CAPS));
   caps->guid = FORMAT_VideoInfo;
-  caps->InputSize.cx = CropVCam::kOutputWidth;
-  caps->InputSize.cy = CropVCam::kOutputHeight;
+  caps->InputSize.cx = width_;
+  caps->InputSize.cy = height_;
   caps->MinCroppingSize = caps->InputSize;
   caps->MaxCroppingSize = caps->InputSize;
   caps->CropGranularityX = 1;
@@ -145,27 +151,56 @@ HRESULT STDMETHODCALLTYPE CCropVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TY
   caps->OutputGranularityY = 1;
   caps->MinFrameInterval = frameLengthUnits_;
   caps->MaxFrameInterval = frameLengthUnits_;
-  caps->MinBitsPerSecond = OutputFrameBytes() * 8 * kTargetFps;
+  // MinBitsPerSecond/MaxBitsPerSecond are LONG (32-bit); a 4K frame's bitrate
+  // overflows that, so clamp rather than let the multiplication wrap. (Not
+  // std::min: windows.h's min/max macros make that unusable here.)
+  constexpr long long kMaxLong = 0x7FFFFFFFLL;
+  const long long bitsPerSecond = static_cast<long long>(FrameBytes()) * 8 * kTargetFps;
+  caps->MinBitsPerSecond = static_cast<LONG>(bitsPerSecond < kMaxLong ? bitsPerSecond : kMaxLong);
   caps->MaxBitsPerSecond = caps->MinBitsPerSecond;
 
   return S_OK;
 }
 
+// Resolves the pin's format from the physical camera's actual resolution
+// (peeked out of shared memory) the first time it's available, then never
+// again - DirectShow negotiates a pin's format once at connect time and
+// doesn't support changing it mid-stream, so whatever's resolved here has to
+// stay correct for the rest of this connection's lifetime. Until a real
+// frame has been observed (e.g. CropVCam.App hasn't started yet), callers
+// see the fallback default instead.
+void CCropVCamStream::EnsureFormatResolved() {
+  if (formatResolved_) {
+    return;
+  }
+
+  int width = 0;
+  int height = 0;
+  if (reader_.TryPeekFrameSize(&width, &height)) {
+    width_ = width;
+    height_ = height;
+    formatResolved_ = true;
+  }
+}
+
+long CCropVCamStream::FrameBytes() const { return static_cast<long>(width_) * height_ * 3; }
+
 HRESULT CCropVCamStream::GetMediaType(CMediaType* pMediaType) {
   CheckPointer(pMediaType, E_POINTER);
+  EnsureFormatResolved();
 
   VIDEOINFOHEADER vih;
   ZeroMemory(&vih, sizeof(vih));
   vih.AvgTimePerFrame = frameLengthUnits_;
   vih.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-  vih.bmiHeader.biWidth = CropVCam::kOutputWidth;
+  vih.bmiHeader.biWidth = width_;
   // Negative: top-down DIB. SharedFrameWriter (C#) writes rows top-down, so
   // this must stay negative or the delivered picture is vertically flipped.
-  vih.bmiHeader.biHeight = -CropVCam::kOutputHeight;
+  vih.bmiHeader.biHeight = -height_;
   vih.bmiHeader.biPlanes = 1;
   vih.bmiHeader.biBitCount = 24;
   vih.bmiHeader.biCompression = BI_RGB;
-  vih.bmiHeader.biSizeImage = OutputFrameBytes();
+  vih.bmiHeader.biSizeImage = FrameBytes();
 
   pMediaType->SetType(&MEDIATYPE_Video);
   pMediaType->SetSubtype(&MEDIASUBTYPE_RGB24);
@@ -182,9 +217,14 @@ HRESULT CCropVCamStream::DecideBufferSize(IMemAllocator* pAlloc, ALLOCATOR_PROPE
   CheckPointer(pProperties, E_POINTER);
 
   CAutoLock lock(m_pFilter->pStateLock());
-
+  // Not EnsureFormatResolved() here: DirectShow always calls GetMediaType
+  // (which resolves the format) before DecideBufferSize within one Connect()
+  // cycle, so width_/height_ are already settled. Re-peeking here too would
+  // open a window where a frame arriving between the two peeks could resolve
+  // a different size in each, sizing this buffer for a format GetMediaType
+  // never actually reported to the downstream consumer.
   pProperties->cBuffers = 2;
-  pProperties->cbBuffer = OutputFrameBytes();
+  pProperties->cbBuffer = FrameBytes();
 
   ALLOCATOR_PROPERTIES actual;
   HRESULT hr = pAlloc->SetProperties(pProperties, &actual);
@@ -204,7 +244,7 @@ HRESULT CCropVCamStream::FillBuffer(IMediaSample* pSample) {
     return hr;
   }
 
-  const long neededBytes = OutputFrameBytes();
+  const long neededBytes = FrameBytes();
   if (pSample->GetSize() < neededBytes) {
     return E_FAIL;
   }
@@ -218,14 +258,12 @@ HRESULT CCropVCamStream::FillBuffer(IMediaSample* pSample) {
 }
 
 void CCropVCamStream::RefreshLatestFrame(long frameBytes) {
-  int width = 0;
-  int height = 0;
-  int stride = 0;
-  // If no fresh frame arrived (app not running yet, or a hiccup),
+  // If no fresh frame arrived (app not running yet, or a hiccup, or the
+  // physical camera's resolution no longer matches what this pin negotiated),
   // latestFrame_ already holds the last one we have (or the initial black
-  // frame) - WaitAndCopyFrame only touches the buffer when it has a real
-  // frame to hand over - so the stream stays alive either way.
-  reader_.WaitAndCopyFrame(latestFrame_, frameBytes, kWaitTimeoutMs, &width, &height, &stride);
+  // frame) - WaitAndCopyFrame only touches the buffer when it has a real,
+  // matching frame to hand over - so the stream stays alive either way.
+  reader_.WaitAndCopyFrame(latestFrame_, frameBytes, kWaitTimeoutMs, width_, height_);
 }
 
 void CCropVCamStream::StampSampleTime(IMediaSample* pSample) {
