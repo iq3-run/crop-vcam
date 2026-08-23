@@ -244,7 +244,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnFrameProcessingFailed(Exception ex)
     {
-        Application.Current.Dispatcher.BeginInvoke(() => ErrorMessage = ex.Message);
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(() => ErrorMessage = ex.Message);
     }
 
     // Returns whether ownership of bgrPixels was handed off to the dispatched
@@ -260,7 +260,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
         {
             try
             {

@@ -4,7 +4,7 @@ using System.Windows.Interop;
 
 namespace CropVCam.App;
 
-public partial class App : Application
+public partial class App : System.Windows.Application
 {
     // Passed to AllowSetForegroundWindow to mean "whichever process calls
     // SetForegroundWindow next may do so", since we don't know the first

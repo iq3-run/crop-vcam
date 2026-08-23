@@ -28,7 +28,7 @@ internal static class CenterCropScaler
 
         using var cropped = new Mat(source, new Rect(x, y, cropWidth, cropHeight));
         var result = new Mat();
-        Cv2.Resize(cropped, result, new Size(outputWidth, outputHeight), interpolation: InterpolationFlags.Linear);
+        Cv2.Resize(cropped, result, new OpenCvSharp.Size(outputWidth, outputHeight), interpolation: InterpolationFlags.Linear);
         return result;
     }
 
