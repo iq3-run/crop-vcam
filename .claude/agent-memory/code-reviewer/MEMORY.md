@@ -3,3 +3,4 @@
 - [Multi-line WHY comments are deliberate](style_multiline_why_comments.md) — don't flag 3-5 line WHY comment blocks in CropVCam.App as a cap violation, it's the established repo style
 - [Agent-memory path cited in shipped comments](style_agent_memory_path_in_comments.md) — flag `.claude/agent-memory/...` file pointers in code comments as a rotting reference, keep the WHY inline instead
 - [ArrayPool ownership handoff (issue #13)](finding_arraypool_ownership_handoff.md) — MainViewModel's frame buffer rent/return-via-bool-ownership pattern, why maxArraysPerBucket:2 is correct, what to re-check on future diffs
+- [Settings persistence (issue #15)](finding_settings_persistence_issue15.md) — caller-reference comments are pre-existing house style not new drift, OutputName nullability gotcha is already handled safely
