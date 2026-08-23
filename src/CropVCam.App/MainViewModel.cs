@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CropVCam.App.Camera;
 using CropVCam.App.Processing;
+using CropVCam.App.Settings;
 using CropVCam.App.VirtualCamera;
 using OpenCvSharp;
 
@@ -68,8 +69,35 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             CameraDevices.Add(device);
         }
 
-        SelectedCamera = CameraDevices.FirstOrDefault(); // triggers OnSelectedCameraChanged, which starts preview capture
+        var savedSettings = SettingsStore.Load();
+        if (savedSettings is not null)
+        {
+            Magnification = Math.Clamp(savedSettings.Magnification, MinMagnification, MaxMagnification);
+            if (!string.IsNullOrWhiteSpace(savedSettings.OutputName))
+            {
+                OutputName = savedSettings.OutputName;
+            }
+        }
+
+        // Matched by name, not CameraDevice.Index - index depends on
+        // enumeration order, which can shift between launches (USB
+        // reconnects, other devices added/removed). Falls back to the first
+        // camera if the saved one isn't present (unplugged, renamed, or no
+        // saved settings yet). Triggers OnSelectedCameraChanged, which
+        // starts preview capture.
+        SelectedCamera = CameraDevices.FirstOrDefault(d => d.Name == savedSettings?.CameraName)
+            ?? CameraDevices.FirstOrDefault();
     }
+
+    // Called from MainWindow.Closed, before Dispose - captures the
+    // in-memory state as of shutdown rather than saving on every
+    // Magnification/OutputName change (both are bound with
+    // UpdateSourceTrigger=PropertyChanged, so they change per slider tick /
+    // keystroke; settings can't change at all while streaming since
+    // CanEditSettings is false, so "value at close time" is always the
+    // final one).
+    public void SaveSettings() =>
+        SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName));
 
     partial void OnSelectedCameraChanged(CameraDevice? value) => RestartPreviewCapture(value);
 

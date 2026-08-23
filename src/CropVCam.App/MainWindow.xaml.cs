@@ -10,6 +10,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _viewModel;
-        Closed += (_, _) => _viewModel.Dispose();
+        Closed += (_, _) =>
+        {
+            _viewModel.SaveSettings();
+            _viewModel.Dispose();
+        };
     }
 }
