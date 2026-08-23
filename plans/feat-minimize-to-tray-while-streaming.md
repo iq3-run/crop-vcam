@@ -33,6 +33,19 @@ WPF自体にはタスクトレイアイコンのAPIが無いため、`System.Win
 `SingleInstance` と同様のコールバック公開スタイルで実装する。「開く」「終了」の
 コンテキストメニューと、アイコンのダブルクリックでの復元を持つ。
 
+実際にビルドすると、`UseWPF`/`UseWindowsForms` の暗黙的global usingが衝突し、
+`Application`（`App.xaml.cs`, `MainViewModel.cs`）・`Size`（`CenterCropScaler.cs`、
+`OpenCvSharp.Size` と `System.Drawing.Size` の衝突）でCS0104が発生した。該当箇所を
+完全修飾名（`System.Windows.Application`, `OpenCvSharp.Size`）に変更して解消。
+プロジェクト全体でこの2箇所以外に衝突する型は無いことをgrepで確認済み（今後
+`System.Drawing`/`System.Windows.Forms` 由来の型名を新たに使う場合は同様の衝突に注意）。
+
+`NotifyIcon` はWinForms専用の内部メッセージループを持たず、生成したスレッド
+（＝WPFの `Dispatcher` がメッセージポンプしているUIスレッド）のネイティブ
+メッセージループ経由でイベントを発火する。そのため `TrayIcon` のイベント
+（`RestoreRequested`/`ExitRequested`）はUIスレッド上で直接発火し、
+`Dispatcher.BeginInvoke` 等のスレッドマーシャリングは不要。
+
 ### ウィンドウのClosing/Closedの扱い
 
 `MainWindow` に `Closing` イベントハンドラを追加する。
