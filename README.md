@@ -2,7 +2,8 @@
 
 物理カメラの映像を中央基準でクロップし、Windows仮想カメラとして出力するデスクトップアプリ。
 管理者権限を一切要求しない（企業管理PCでの利用を想定）。詳しい背景・技術方針は
-[plans/feat-crop-vcam-app.md](plans/feat-crop-vcam-app.md) を参照。
+[plans/feat-crop-vcam-app.md](plans/feat-crop-vcam-app.md) を参照。バージョンごとの変更点は
+[CHANGELOG.md](CHANGELOG.md) を参照。
 
 ## 構成
 
