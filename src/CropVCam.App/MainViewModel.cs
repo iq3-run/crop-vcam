@@ -46,7 +46,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     private string outputName = DefaultOutputName;
 
     [ObservableProperty]
-    private bool unregisterOnExit = true;
+    private bool unregisterOnExit = AppSettings.DefaultUnregisterOnExit;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartStopButtonText))]
@@ -93,6 +93,13 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             ?? CameraDevices.FirstOrDefault();
     }
 
+    // Read by UnregisterFilter() below. Set from SaveSettings() rather than
+    // relying on SettingsStore.Load() at exit time - SettingsStore.Save()
+    // swallows IOException/UnauthorizedAccessException, so a failed write
+    // could otherwise leave disk holding a stale (or absent) value that
+    // disagrees with what the checkbox actually showed this session.
+    private static bool s_unregisterOnExit = AppSettings.DefaultUnregisterOnExit;
+
     // Called from MainWindow.Closed, before Dispose - captures the
     // in-memory state as of shutdown rather than saving on every
     // Magnification/OutputName change (both are bound with
@@ -100,8 +107,11 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     // keystroke; settings can't change at all while streaming since
     // CanEditSettings is false, so "value at close time" is always the
     // final one).
-    public void SaveSettings() =>
+    public void SaveSettings()
+    {
+        s_unregisterOnExit = UnregisterOnExit;
         SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName, UnregisterOnExit));
+    }
 
     partial void OnSelectedCameraChanged(CameraDevice? value) => RestartPreviewCapture(value);
 
@@ -286,13 +296,13 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     // "停止" button only halts streaming and deliberately leaves the
     // registration in place for the next "開始"; only a full app exit
     // cleans up the registry, and only if the user opted into that via the
-    // UnregisterOnExit checkbox. Reads settings from disk rather than an
+    // UnregisterOnExit checkbox. Reads s_unregisterOnExit rather than an
     // instance because App holds no MainViewModel reference; MainWindow's
-    // Closed handler already calls SaveSettings() before OnExit runs, so the
-    // saved value always reflects the checkbox state at exit time.
+    // Closed handler already calls SaveSettings() (which sets the field)
+    // before OnExit runs.
     public static void UnregisterFilter()
     {
-        if (SettingsStore.Load()?.UnregisterOnExit ?? true)
+        if (s_unregisterOnExit)
         {
             FilterRegistrar.TryUnregister(ResolveFilterDllPath());
         }
