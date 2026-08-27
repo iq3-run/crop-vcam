@@ -5,3 +5,4 @@
 - [ArrayPool ownership handoff (issue #13)](finding_arraypool_ownership_handoff.md) — MainViewModel's frame buffer rent/return-via-bool-ownership pattern, why maxArraysPerBucket:2 is correct, what to re-check on future diffs
 - [Settings persistence (issue #15)](finding_settings_persistence_issue15.md) — caller-reference comments are pre-existing house style not new drift, OutputName nullability gotcha is already handled safely
 - [Tray-minimize while streaming (issue #16)](finding_tray_minimize_issue16.md) — NotifyIcon.Dispose() from its own Click chain is a safe standard idiom, Closing/IsVisibleChanged/ActivateMainWindow paths verified race-free, MainWindow ctor is the one real oversized-function finding
+- [UnregisterOnExit checkbox (issue #22)](finding_unregister_on_exit_issue22.md) — verified OnExit-after-Closed ordering and .NET 8 record-default JSON fallback both hold; no real findings this round

@@ -46,6 +46,9 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     private string outputName = DefaultOutputName;
 
     [ObservableProperty]
+    private bool unregisterOnExit = true;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartStopButtonText))]
     [NotifyPropertyChangedFor(nameof(CanEditSettings))]
     [NotifyCanExecuteChangedFor(nameof(StartStopCommand))]
@@ -77,6 +80,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 OutputName = savedSettings.OutputName;
             }
+            UnregisterOnExit = savedSettings.UnregisterOnExit;
         }
 
         // Matched by name, not CameraDevice.Index - index depends on
@@ -97,7 +101,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     // CanEditSettings is false, so "value at close time" is always the
     // final one).
     public void SaveSettings() =>
-        SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName));
+        SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName, UnregisterOnExit));
 
     partial void OnSelectedCameraChanged(CameraDevice? value) => RestartPreviewCapture(value);
 
@@ -281,8 +285,18 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     // Called from App.OnExit, separately from StopStreaming/Dispose - the
     // "停止" button only halts streaming and deliberately leaves the
     // registration in place for the next "開始"; only a full app exit
-    // cleans up the registry.
-    public static void UnregisterFilter() => FilterRegistrar.TryUnregister(ResolveFilterDllPath());
+    // cleans up the registry, and only if the user opted into that via the
+    // UnregisterOnExit checkbox. Reads settings from disk rather than an
+    // instance because App holds no MainViewModel reference; MainWindow's
+    // Closed handler already calls SaveSettings() before OnExit runs, so the
+    // saved value always reflects the checkbox state at exit time.
+    public static void UnregisterFilter()
+    {
+        if (SettingsStore.Load()?.UnregisterOnExit ?? true)
+        {
+            FilterRegistrar.TryUnregister(ResolveFilterDllPath());
+        }
+    }
 
     private static string ResolveFilterDllPath() => Path.Combine(AppContext.BaseDirectory, FilterDllFileName);
 
