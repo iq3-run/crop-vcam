@@ -155,7 +155,7 @@ HRESULT STDMETHODCALLTYPE CCropVCamStream::GetStreamCaps(int iIndex, AM_MEDIA_TY
   // overflows that, so clamp rather than let the multiplication wrap. (Not
   // std::min: windows.h's min/max macros make that unusable here.)
   constexpr long long kMaxLong = 0x7FFFFFFFLL;
-  const long long bitsPerSecond = static_cast<long long>(FrameBytes()) * 8 * kTargetFps;
+  const long long bitsPerSecond = static_cast<long long>(PaddedFrameBytes()) * 8 * kTargetFps;
   caps->MinBitsPerSecond = static_cast<LONG>(bitsPerSecond < kMaxLong ? bitsPerSecond : kMaxLong);
   caps->MaxBitsPerSecond = caps->MinBitsPerSecond;
 
@@ -183,7 +183,21 @@ void CCropVCamStream::EnsureFormatResolved() {
   }
 }
 
-long CCropVCamStream::FrameBytes() const { return static_cast<long>(width_) * height_ * 3; }
+long CCropVCamStream::PackedRowBytes() const { return static_cast<long>(width_) * 3; }
+
+// BI_RGB rows are padded to a 4-byte boundary per the DIB spec - a camera
+// width that isn't a multiple of 4 needs more bytes per row here than the
+// shared-memory payload (which stays tightly packed - see PackedRowBytes).
+long CCropVCamStream::PaddedRowBytes() const { return (PackedRowBytes() + 3) & ~3; }
+
+// Size of the packed copy read out of shared memory into latestFrame_ - not
+// what's delivered to DirectShow, see PaddedFrameBytes for that.
+long CCropVCamStream::PackedFrameBytes() const { return PackedRowBytes() * height_; }
+
+// The actual frame size DirectShow sees: biSizeImage, allocator buffer size,
+// bitrate, and SetActualDataLength all need the padded (not packed) size, or
+// a non-multiple-of-4 width delivers an undersized/misaligned frame.
+long CCropVCamStream::PaddedFrameBytes() const { return PaddedRowBytes() * height_; }
 
 HRESULT CCropVCamStream::GetMediaType(CMediaType* pMediaType) {
   CheckPointer(pMediaType, E_POINTER);
@@ -200,7 +214,7 @@ HRESULT CCropVCamStream::GetMediaType(CMediaType* pMediaType) {
   vih.bmiHeader.biPlanes = 1;
   vih.bmiHeader.biBitCount = 24;
   vih.bmiHeader.biCompression = BI_RGB;
-  vih.bmiHeader.biSizeImage = FrameBytes();
+  vih.bmiHeader.biSizeImage = PaddedFrameBytes();
 
   pMediaType->SetType(&MEDIATYPE_Video);
   pMediaType->SetSubtype(&MEDIASUBTYPE_RGB24);
@@ -224,7 +238,7 @@ HRESULT CCropVCamStream::DecideBufferSize(IMemAllocator* pAlloc, ALLOCATOR_PROPE
   // a different size in each, sizing this buffer for a format GetMediaType
   // never actually reported to the downstream consumer.
   pProperties->cBuffers = 2;
-  pProperties->cbBuffer = FrameBytes();
+  pProperties->cbBuffer = PaddedFrameBytes();
 
   ALLOCATOR_PROPERTIES actual;
   HRESULT hr = pAlloc->SetProperties(pProperties, &actual);
@@ -244,17 +258,38 @@ HRESULT CCropVCamStream::FillBuffer(IMediaSample* pSample) {
     return hr;
   }
 
-  const long neededBytes = FrameBytes();
-  if (pSample->GetSize() < neededBytes) {
+  const long paddedBytes = PaddedFrameBytes();
+  if (pSample->GetSize() < paddedBytes) {
     return E_FAIL;
   }
 
-  RefreshLatestFrame(neededBytes);
-  std::memcpy(pData, latestFrame_, neededBytes);
-  pSample->SetActualDataLength(neededBytes);
+  RefreshLatestFrame(PackedFrameBytes());
+  CopyRowsWithPadding(pData);
+  pSample->SetActualDataLength(paddedBytes);
 
   StampSampleTime(pSample);
   return S_OK;
+}
+
+// latestFrame_ holds the packed copy read out of shared memory (stride
+// PackedRowBytes()); this expands it into pSample's buffer at the padded DIB
+// stride DirectShow expects (PaddedRowBytes()), zero-filling each row's
+// padding bytes rather than leaving them as whatever the allocator handed
+// back. A no-op expansion (plain equal-size copy) when width_ is already a
+// multiple of 4, since the two strides are then equal.
+void CCropVCamStream::CopyRowsWithPadding(BYTE* dest) const {
+  const long packedRowBytes = PackedRowBytes();
+  const long paddedRowBytes = PaddedRowBytes();
+  const long paddingBytes = paddedRowBytes - packedRowBytes;
+
+  for (int row = 0; row < height_; ++row) {
+    const BYTE* srcRow = latestFrame_ + static_cast<size_t>(row) * packedRowBytes;
+    BYTE* destRow = dest + static_cast<size_t>(row) * paddedRowBytes;
+    std::memcpy(destRow, srcRow, packedRowBytes);
+    if (paddingBytes > 0) {
+      std::memset(destRow + packedRowBytes, 0, paddingBytes);
+    }
+  }
 }
 
 void CCropVCamStream::RefreshLatestFrame(long frameBytes) {

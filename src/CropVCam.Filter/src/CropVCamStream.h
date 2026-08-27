@@ -45,8 +45,12 @@ class CCropVCamStream : public CSourceStream, public IKsPropertySet, public IAMS
 
  private:
   void EnsureFormatResolved();
-  long FrameBytes() const;
+  long PackedRowBytes() const;
+  long PaddedRowBytes() const;
+  long PackedFrameBytes() const;
+  long PaddedFrameBytes() const;
   void RefreshLatestFrame(long frameBytes);
+  void CopyRowsWithPadding(BYTE* dest) const;
   void StampSampleTime(IMediaSample* pSample);
 
   CropVCam::SharedFrameReader reader_;
