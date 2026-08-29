@@ -16,6 +16,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- 入力 -->
@@ -70,9 +71,14 @@
                      IsEnabled="{Binding CanEditSettings}" />
         </Grid>
 
-        <TextBlock Grid.Row="4" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,4" />
+        <CheckBox Grid.Row="4" Content="終了時にレジストリ登録を解除する"
+                  IsChecked="{Binding UnregisterOnExit}"
+                  Margin="0,0,0,4"
+                  ToolTip="チェックを外すとレジストリに登録が残りますが、次回以降Zoom等を先に開いても認識されるようになります（起動順に縛られなくなります）。" />
 
-        <Button Grid.Row="5" Content="{Binding StartStopButtonText}"
+        <TextBlock Grid.Row="5" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,4" />
+
+        <Button Grid.Row="6" Content="{Binding StartStopButtonText}"
                 Command="{Binding StartStopCommand}"
                 Width="100" Height="32" HorizontalAlignment="Right" />
     </Grid>

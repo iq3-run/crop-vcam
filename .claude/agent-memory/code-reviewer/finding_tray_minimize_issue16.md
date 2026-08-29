@@ -17,4 +17,6 @@ metadata:
 
 **How to apply:** If this area changes again, re-verify the same four paths (close-while-streaming, tray restore, second-instance relaunch, taskbar-minimize) still don't regress into showing a stale tray icon or losing the streaming-continues guarantee — don't just diff-review the new lines.
 
-**Real finding, not yet fixed as of this review:** `MainWindow()` constructor (in `MainWindow.xaml.cs`) wires five things inline (`RestoreRequested`, `ExitRequested`, `IsVisibleChanged`, `Closing`, `Closed`) and runs ~30 physical lines / ~21 statement lines, over CLAUDE.md's 20-line function cap. Recommended split: extract `WireTrayIcon()` and `WireWindowLifecycle()` private methods. Also worth normalizing the mix of named-method (`OnClosing`, `RestoreFromTray`) vs. inline-lambda (`ExitRequested`, `IsVisibleChanged`, `Closed`) subscriptions for consistency — pick one style per file.
+**Resolved as of the 2026-08-27 (#22) review:** `MainWindow()` constructor now calls `WireTrayIcon()` and `WireWindowLifecycle()`, exactly the split recommended below. Confirmed by reading the current file — no further action needed, don't re-flag.
+
+Original finding (kept for history): `MainWindow()` constructor wired five things inline (`RestoreRequested`, `ExitRequested`, `IsVisibleChanged`, `Closing`, `Closed`) and ran ~30 physical lines / ~21 statement lines, over CLAUDE.md's 20-line function cap.
