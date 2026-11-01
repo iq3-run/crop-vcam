@@ -48,6 +48,11 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool unregisterOnExit = AppSettings.DefaultUnregisterOnExit;
 
+    // Display-only: the mirrored image is applied in the view, so the frames
+    // written to the virtual camera are never flipped.
+    [ObservableProperty]
+    private bool flipPreview;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(StartStopButtonText))]
     [NotifyPropertyChangedFor(nameof(CanEditSettings))]
@@ -81,6 +86,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
                 OutputName = savedSettings.OutputName;
             }
             UnregisterOnExit = savedSettings.UnregisterOnExit;
+            FlipPreview = savedSettings.FlipPreview;
         }
 
         // Matched by name, not CameraDevice.Index - index depends on
@@ -110,7 +116,7 @@ internal sealed partial class MainViewModel : ObservableObject, IDisposable
     public void SaveSettings()
     {
         s_unregisterOnExit = UnregisterOnExit;
-        SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName, UnregisterOnExit));
+        SettingsStore.Save(new AppSettings(SelectedCamera?.Name, Magnification, OutputName, UnregisterOnExit, FlipPreview));
     }
 
     partial void OnSelectedCameraChanged(CameraDevice? value) => RestartPreviewCapture(value);

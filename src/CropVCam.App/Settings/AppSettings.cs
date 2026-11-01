@@ -12,7 +12,8 @@ internal sealed record AppSettings(
     string? CameraName,
     double Magnification,
     string OutputName,
-    bool UnregisterOnExit = AppSettings.DefaultUnregisterOnExit)
+    bool UnregisterOnExit = AppSettings.DefaultUnregisterOnExit,
+    bool FlipPreview = false)
 {
     // Shared with MainViewModel's unregisterOnExit field/s_unregisterOnExit
     // initializers so the "unregister by default" behavior only needs to
