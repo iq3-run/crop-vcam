@@ -39,7 +39,8 @@
     <None Include="..\CropVCam.Filter\build\CropVCamFilter.dll"
           Condition="Exists('..\CropVCam.Filter\build\CropVCamFilter.dll')"
           Link="CropVCamFilter.dll"
-          CopyToOutputDirectory="PreserveNewest" />
+          CopyToOutputDirectory="PreserveNewest"
+          ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>
