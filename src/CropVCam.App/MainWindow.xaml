@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CropVCam.App"
         mc:Ignorable="d"
-        Title="crop-vcam" Height="480" Width="420"
+        Title="crop-vcam" Height="510" Width="420"
         ResizeMode="CanMinimize"
         d:DataContext="{d:DesignInstance local:MainViewModel}">
     <Grid Margin="12">
@@ -13,6 +13,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -56,7 +57,21 @@
 
         <!-- プレビュー -->
         <Border Grid.Row="2" BorderBrush="Gray" BorderThickness="1" Background="Black" Margin="0,0,0,8">
-            <Image Source="{Binding PreviewImage}" Stretch="Uniform" />
+            <Image Source="{Binding PreviewImage}" Stretch="Uniform" RenderTransformOrigin="0.5,0.5">
+                <Image.Style>
+                    <Style TargetType="Image">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding FlipPreview}" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="-1" />
+                                    </Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Image.Style>
+            </Image>
         </Border>
 
         <!-- 出力 -->
@@ -71,14 +86,19 @@
                      IsEnabled="{Binding CanEditSettings}" />
         </Grid>
 
-        <CheckBox Grid.Row="4" Content="終了時にレジストリ登録を解除する"
+        <CheckBox Grid.Row="4" Content="プレビューを左右反転する"
+                  IsChecked="{Binding FlipPreview}"
+                  Margin="0,0,0,4"
+                  ToolTip="プレビュー表示だけを左右反転します。仮想カメラの出力映像は反転されません。" />
+
+        <CheckBox Grid.Row="5" Content="終了時にレジストリ登録を解除する"
                   IsChecked="{Binding UnregisterOnExit}"
                   Margin="0,0,0,4"
                   ToolTip="チェックを外すとレジストリに登録が残りますが、次回以降Zoom等を先に開いても認識されるようになります（起動順に縛られなくなります）。" />
 
-        <TextBlock Grid.Row="5" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,4" />
+        <TextBlock Grid.Row="6" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,4" />
 
-        <Button Grid.Row="6" Content="{Binding StartStopButtonText}"
+        <Button Grid.Row="7" Content="{Binding StartStopButtonText}"
                 Command="{Binding StartStopCommand}"
                 Width="100" Height="32" HorizontalAlignment="Right" />
     </Grid>

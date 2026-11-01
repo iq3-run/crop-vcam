@@ -62,6 +62,9 @@ dotnet run --project src/CropVCam.App/CropVCam.App.csproj
 外すと登録はレジストリに残り続けるが、その代わり次回以降はcrop-vcamを起動していなくても
 Zoom等のカメラ選択リストに出力名が表示され続ける（起動順に縛られなくなる）。
 
+「プレビューを左右反転する」チェックボックスは、プレビュー表示だけを鏡像にする（仮想カメラへの
+出力映像は反転されない）。
+
 選択カメラ・倍率・出力カメラ名・上記チェックボックスの状態は、ウィンドウを閉じる際に
 `%LOCALAPPDATA%\CropVCam\settings.json` へ保存され、次回起動時に復元される（カメラは名前で
 照合するため、未接続等で見つからない場合は先頭のカメラにフォールバックする）。
@@ -91,6 +94,11 @@ dotnet publish src/CropVCam.App/CropVCam.App.csproj -c Release -r win-x64 --self
 `dotnet publish` はcsprojの `None Include` 経由で `CropVCam.Filter/build/CropVCamFilter.dll`（Debug構成の
 既定出力先）をコピーするため、Release構成のフィルタを配布する場合は publish 後に
 `CropVCam.Filter/build-release/CropVCamFilter.dll` で上書きすること。
+
+csprojでシングルファイル化（`PublishSingleFile`、ネイティブライブラリも同梱）しているため、publish出力は
+`CropVCam.App.exe` と `CropVCamFilter.dll` のみになる（言語別フォルダ・pdbも出力しない）。
+`CropVCamFilter.dll` はレジストリに絶対パスが登録される都合でexeと同じ場所に置く。
+exe初回起動時は同梱ライブラリを一時フォルダへ展開するため、起動が少し遅くなる。
 
 ## 既知の制約 / 未検証事項
 
