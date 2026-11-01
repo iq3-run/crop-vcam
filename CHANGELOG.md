@@ -3,6 +3,13 @@
 crop-vcamの変更履歴。日付はリリース日（JST）。各リリースのビルド成果物は
 [GitHub Releases](https://github.com/iq3-run/crop-vcam/releases)から入手できます。
 
+## [v0.4.0](https://github.com/iq3-run/crop-vcam/releases/tag/v0.4.0) - 2026-11-01
+
+- 「**プレビューを左右反転する**」チェックボックスを追加しました。反転するのはプレビュー表示のみで、Zoom等へ出力される映像は反転されません。設定は次回起動時にも復元されます。
+- 配布物をシングルファイル化し、フォルダ直下が `CropVCam.App.exe`・`CropVCamFilter.dll`・`README.txt` の3ファイルだけになりました（ランタイムDLLや言語別フォルダがなくなりました）。初回起動時のみ、同梱ライブラリの展開のため起動が少し遅くなります。
+
+(#27, #28)
+
 ## [v0.3.0](https://github.com/iq3-run/crop-vcam/releases/tag/v0.3.0) - 2026-08-23
 
 - 選択カメラ・倍率・出力カメラ名を**次回起動時に自動で復元**するようになりました。設定はウィンドウを閉じるときに `%LOCALAPPDATA%\CropVCam\settings.json` へ保存されます。
